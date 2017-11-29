@@ -27,7 +27,6 @@ PARSER.add_argument('--no-rand_start', dest='rand_start',action='store_false', h
 PARSER.set_defaults(rand_start=True)
 PARSER.add_argument('-lr', '--learning_rate', default=0.02, type=float, help='learning rate')
 PARSER.add_argument('-ni', '--n_iters', default=20, type=int, help='number of iterations')
-PARSER.add_argument('-s', '--sparse', default=False, action='store_true', help='flag to use sparse tensors in tf')
 ARGS = PARSER.parse_args()
 print ARGS
 
@@ -99,20 +98,15 @@ def main():
 
   trajs = generate_demonstrations(gw, policy_gt, n_trajs=N_TRAJS, len_traj=L_TRAJ, rand_start=RAND_START)
 
-  mu = np.zeros([N_STATES])
-
-  for traj in trajs:
-    mu[traj[0].cur_state] += 1
-  mu = mu / len(trajs)
   
   print 'Deep Max Ent IRL training ..'
   t = time.time()
-  rewards = deep_maxent_irl(feat_map, P_a, GAMMA, trajs, LEARNING_RATE, N_ITERS, ARGS.sparse)
+  rewards = deep_maxent_irl(feat_map, P_a, GAMMA, trajs, LEARNING_RATE, N_ITERS)
   print('time for dirl', time.time() - t)
 
   values, policy = value_iteration.value_iteration(P_a, rewards, GAMMA, error=0.01, deterministic=True)
 
-  print('evd', expected_value_diff(P_a, rewards, rewards_gt, GAMMA, mu, values_gt, policy))
+  #print('evd', expected_value_diff(P_a, rewards, rewards_gt, GAMMA, mu, values_gt, policy))
 
   # plots
   plt.figure(figsize=(20,4))

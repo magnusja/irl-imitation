@@ -17,8 +17,12 @@ import multiprocessing
 
 def softmax(x):
   """Compute softmax values for each sets of scores in x."""
-  e_x = np.exp(x - np.max(x, axis=-1)[:, np.newaxis])
-  return e_x / e_x.sum(axis=-1)[:, np.newaxis]
+  if len(x.shape) > 1:
+    e_x = np.exp(x - np.max(x, axis=-1)[:, np.newaxis])
+    return e_x / e_x.sum(axis=-1)[:, np.newaxis]
+  else:
+    e_x = np.exp(x - np.max(x))
+    return e_x / e_x.sum()
 
 def value_iteration_old(P_a, rewards, gamma, error=0.01, deterministic=True):
   """
@@ -106,6 +110,7 @@ def value_iteration(P_a, rewards, gamma, error=0.01, deterministic=True):
   if chunk_size == 0:
     chunk_size = N_STATES
 
+  rewards_expanded = rewards[:, np.newaxis].repeat(N_STATES, axis=1)
   count = 0
   # estimate values
   while True:
@@ -113,10 +118,10 @@ def value_iteration(P_a, rewards, gamma, error=0.01, deterministic=True):
     values_tmp = values.copy()
 
     def step(start, end):
-      tmp = rewards[start:end, np.newaxis].repeat(N_STATES, axis=1) + gamma * values_tmp
-      tmp = tmp[:, :, np.newaxis].repeat(N_ACTIONS, axis=2)
-      tmp = np.transpose(tmp, (0, 2, 1))
-      values[start:end] = (P[start:end, :, :] * tmp).sum(axis=2).max(axis=1)
+      expected_value = rewards_expanded[start:end, :] + gamma * values_tmp
+      expected_value = expected_value[:, :, np.newaxis].repeat(N_ACTIONS, axis=2)
+      expected_value = np.transpose(expected_value, (0, 2, 1))
+      values[start:end] = (P[start:end, :, :] * expected_value).sum(axis=2).max(axis=1)
 
     with ThreadPoolExecutor(max_workers=num_cpus) as e:
       futures = list()
@@ -134,17 +139,20 @@ def value_iteration(P_a, rewards, gamma, error=0.01, deterministic=True):
       print('VI', count)
       break
 
+  expected_value = rewards_expanded + gamma * values
+  expected_value = expected_value[:, :, np.newaxis].repeat(N_ACTIONS, axis=2)
+  expected_value = np.transpose(expected_value, (0, 2, 1))
+
+
   if deterministic:
     # generate deterministic policy
-    policy = np.argmax((P * (rewards + gamma * values_tmp)).sum(axis=2), axis=1)
-
+    policy = np.argmax((P * expected_value).sum(axis=2), axis=1)
     print(time.time() - t)
 
     return values, policy
   else:
-
     # generate stochastic policy
-    policy = (P * (rewards + gamma * values_tmp)).sum(axis=2)
+    policy = (P * expected_value).sum(axis=2)
     policy = softmax(policy)
 
     print(time.time() - t)
@@ -347,8 +355,75 @@ class ValueIterationAgent(object):
     return actions[a_id]
 
 
+def optimal_value(n_states, n_actions, transition_probabilities, reward,
+                  discount, threshold=1e-2):
+    """
+    FROM https://github.com/MatthewJA/Inverse-Reinforcement-Learning/blob/master/irl/value_iteration.py
+    Find the optimal value function.
+    n_states: Number of states. int.
+    n_actions: Number of actions. int.
+    transition_probabilities: Function taking (state, action, state) to
+        transition probabilities.
+    reward: Vector of rewards for each state.
+    discount: MDP discount factor. float.
+    threshold: Convergence threshold, default 1e-2. float.
+    -> Array of values for each state
+    """
+
+    v = np.zeros(n_states)
+    new_v = np.zeros(n_states)
+
+    diff = float("inf")
+    while diff > threshold:
+        diff = 0
+        v = new_v.copy()
+        for s in range(n_states):
+            max_v = float("-inf")
+            for a in range(n_actions):
+                tp = transition_probabilities[s, a, :]
+                max_v = max(max_v, np.dot(tp, reward[s] + discount * v))
+                max_v = max(max_v, np.sum(tp * (reward[s] + discount*v)))
+
+            new_diff = abs(v[s] - max_v)
+            if new_diff > diff:
+                diff = new_diff
+            new_v[s] = max_v
+
+    return v
 
 
+def value(policy, n_states, transition_probabilities, reward, discount,
+                    threshold=1e-2):
+    """
+    FROM https://github.com/MatthewJA/Inverse-Reinforcement-Learning/blob/master/irl/value_iteration.py#L10
 
+    Find the value function associated with a policy.
 
+    policy: List of action ints for each state.
+    n_states: Number of states. int.
+    transition_probabilities: Function taking (state, action, state) to
+        transition probabilities.
+    reward: Vector of rewards for each state.
+    discount: MDP discount factor. float.
+    threshold: Convergence threshold, default 1e-2. float.
+    -> Array of values for each state
+    """
+    v = np.zeros(n_states)
 
+    diff = float("inf")
+    while diff > threshold:
+        diff = 0
+        for s in range(n_states):
+            vs = v[s]
+            a = policy[s]
+            v[s] = sum(transition_probabilities[s, a, k] *
+                       (reward[k] + discount * v[k])
+                       for k in range(n_states))
+            diff = max(diff, abs(vs - v[s]))
+
+    return v
+
+def expected_value_diff(P_a, rewards, true_rewards, gamma, p_start, optimal_value, policy, error=0.01, deterministic=True):
+  v = value(policy, P_a.shape[0], P_a.transpose(0, 2, 1), true_rewards, gamma)
+
+  return optimal_value.dot(p_start) - v.dot(p_start)

@@ -16,23 +16,19 @@ from utils import *
 class DeepIRLFC:
 
 
-  def __init__(self, n_input, n_actions, lr, T, n_h1=400, n_h2=300, l2=10, deterministic=False, sparse=False, name='deep_irl_fc'):
+  def __init__(self, n_input, n_actions, lr, T, n_h1=400, n_h2=300, l2=10, deterministic=False, name='deep_irl_fc'):
     self.n_input = n_input
     self.lr = lr
     self.n_h1 = n_h1
     self.n_h2 = n_h2
     self.name = name
-    self.sparse = sparse
     self.deterministic = deterministic
 
     self.sess = tf.Session()
     self.input_s, self.reward, self.theta = self._build_network(self.name)
 
     # value iteration
-    if sparse:
-        self.P_a = tf.sparse_placeholder(tf.float32, shape=(n_input, n_actions, n_input))
-    else:
-        self.P_a = tf.placeholder(tf.float32, shape=(n_input, n_actions, n_input))
+    self.P_a = tf.placeholder(tf.float32, shape=(n_input, n_actions, n_input))
     self.gamma = tf.placeholder(tf.float32)
     self.epsilon = tf.placeholder(tf.float32)
     self.values, self.policy = self._vi(self.reward)
@@ -68,23 +64,24 @@ class DeepIRLFC:
         initializer=tf.contrib.layers.variance_scaling_initializer(mode="FAN_IN"))
       reward = tf_utils.fc(fc2, 1, scope="reward")
     theta = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=name)
-    return input_s, reward, theta
+    return input_s, tf.squeeze(reward), theta
 
   def _vi(self, rewards):
 
-      rewards = tf.squeeze(rewards)
+      rewards_expanded = tf.tile(tf.expand_dims(rewards, 1), [1, self.n_input])
 
       def body(i, c, t):
           old_values = t.read(i)
-          if self.sparse:
-              new_values = tf.sparse_reduce_max(
-                  tf.sparse_reduce_sum_sparse(self.P_a * (rewards + self.gamma * old_values), axis=2), axis=1)
-          else:
-            new_values = tf.reduce_max(tf.reduce_sum(self.P_a * (rewards + self.gamma * old_values), axis=2), axis=1)
+
+          expected_value = rewards_expanded + self.gamma * old_values
+          expected_value = tf.tile(tf.expand_dims(expected_value, 1), [1, tf.shape(self.P_a)[1], 1])
+
+          new_values = tf.reduce_max(tf.reduce_sum(self.P_a * expected_value, axis=2), axis=1)
+          t = t.write(i + 1, new_values)
 
           c = tf.reduce_max(tf.abs(new_values - old_values)) > self.epsilon
           c.set_shape(())
-          t = t.write(i + 1, new_values)
+
           return i + 1, c, t
 
       def condition(i, c, t):
@@ -97,18 +94,13 @@ class DeepIRLFC:
                                    name='VI_loop')
       values = values.read(i)
 
-      if self.deterministic:
-          if self.sparse:
-              policy = tf.argmax(tf.sparse_tensor_to_dense(tf.sparse_reduce_sum_sparse(self.P_a * (rewards + self.gamma * values), axis=2)), axis=1)
-          else:
-              policy = tf.argmax(tf.reduce_sum(self.P_a * (rewards + self.gamma * values), axis=2), axis=1)
-      else:
-          if self.sparse:
-              policy = tf.sparse_tensor_to_dense(
-                  tf.sparse_reduce_sum_sparse(self.P_a * (rewards + self.gamma * values), axis=2))
-          else:
-              policy = tf.reduce_sum(self.P_a * (rewards + self.gamma * values), axis=2)
+      expected_value = rewards_expanded + self.gamma * values
+      expected_value = tf.tile(tf.expand_dims(expected_value, 1), [1, tf.shape(self.P_a)[1], 1])
 
+      if self.deterministic:
+          policy = tf.argmax(tf.reduce_sum(self.P_a * expected_value, axis=2), axis=1)
+      else:
+          policy = tf.reduce_sum(self.P_a * expected_value, axis=2)
           policy = tf.nn.softmax(policy)
 
       return values, policy
@@ -140,7 +132,20 @@ class DeepIRLFC:
                   mu.append(cur_mu)
 
       mu = tf.stack(mu)
-      return tf.reduce_sum(mu, axis=0)
+      mu = tf.reduce_sum(mu, axis=0)
+      if self.deterministic:
+          # NOTE: In the deterministic case it helps to scale the svf by T to recover the reward properly
+          # I noticed that if it is not scaled by T then the recovered reward and the resulting value function
+          # have extremely low values (usually < 0.01). With such low values it is hard to actually recover a
+          # difference in the value of states (i.e. if only the last few digits after the comma differ).
+          # One intuition why scaling by T is useful is to stabilize the gradients and avoid that the gradients
+          # are getting too high
+          # TODO: maybe gradient clipping and normalizing the svf of demonstrations and the policy might help as well
+          # As a side note: This is not mentioned somewhere in the pulications, but for me this countermeasure works
+          # pretty well (on the other hand using a deterministic policy is anyways never meantioned in one of the
+          # publications, they always describe optimizing with stochastic policies)
+          mu /= self.T
+      return mu
 
 
   def get_theta(self):
@@ -230,6 +235,19 @@ def compute_state_visition_freq(P_a, gamma, trajs, policy, deterministic=True):
 
   p = np.sum(mu, 1)
 
+  if deterministic:
+      # NOTE: In the deterministic case it helps to scale the svf by T to recover the reward properly
+      # I noticed that if it is not scaled by T then the recovered reward and the resulting value function
+      # have extremely low values (usually < 0.01). With such low values it is hard to actually recover a
+      # difference in the value of states (i.e. if only the last few digits after the comma differ).
+      # One intuition why scaling by T is useful is to stabilize the gradients and avoid that the gradients
+      # are getting too high
+      # TODO: maybe gradient clipping and normalizing the svf of demonstrations and the policy might help as well
+      # As a side note: This is not mentioned somewhere in the pulications, but for me this countermeasure works
+      # pretty well (on the other hand using a deterministic policy is anyways never meantioned in one of the
+      # publications, they always describe optimizing with stochastic policies)
+      p /= T
+
   print(time.time() - tt)
   return p
 
@@ -283,10 +301,23 @@ def compute_state_visition_freq_old(P_a, gamma, trajs, policy, deterministic=Tru
                      range(N_STATES)])
 
     p = np.sum(mu, 1)
+    print('SUM SVF', p.sum())
+    if deterministic:
+        # NOTE: In the deterministic case it helps to scale the svf by T to recover the reward properly
+        # I noticed that if it is not scaled by T then the recovered reward and the resulting value function
+        # have extremely low values (usually < 0.01). With such low values it is hard to actually recover a
+        # difference in the value of states (i.e. if only the last few digits after the comma differ).
+        # One intuition why scaling by T is useful is to stabilize the gradients and avoid that the gradients
+        # are getting too high
+        # TODO: maybe gradient clipping and normalizing the svf of demonstrations and the policy might help as well
+        # As a side note: This is not mentioned somewhere in the pulications, but for me this countermeasure works
+        # pretty well (on the other hand using a deterministic policy is anyways never meantioned in one of the
+        # publications, they always describe optimizing with stochastic policies)
+        p /= T
     return p
 
 
-def deep_maxent_irl(feat_map, P_a, gamma, trajs, lr, n_iters, sparse):
+def deep_maxent_irl(feat_map, P_a, gamma, trajs, lr, n_iters):
   """
   Maximum Entropy Inverse Reinforcement Learning (Maxent IRL)
 
@@ -309,17 +340,15 @@ def deep_maxent_irl(feat_map, P_a, gamma, trajs, lr, n_iters, sparse):
   N_STATES, _, N_ACTIONS = np.shape(P_a)
 
   # init nn model
-  nn_r = DeepIRLFC(feat_map.shape[1], N_ACTIONS, lr, len(trajs[0]), 3, 3, deterministic=True, sparse=sparse)
+  nn_r = DeepIRLFC(feat_map.shape[1], N_ACTIONS, lr, len(trajs[0]), 3, 3, deterministic=False)
 
   # find state visitation frequencies using demonstrations
   mu_D = demo_svf(trajs, N_STATES)
   p_start_state = start_state_probs(trajs, N_STATES)
 
   P_a_t = P_a.transpose(0, 2, 1)
-  if sparse:
-    mask = P_a_t > 0
-    indices = np.argwhere(mask)
-    P_a_t = tf.SparseTensorValue(indices, P_a_t[mask], P_a_t.shape)
+
+  grads = list()
 
   # training 
   for iteration in range(n_iters):
@@ -327,10 +356,10 @@ def deep_maxent_irl(feat_map, P_a, gamma, trajs, lr, n_iters, sparse):
       print 'iteration: {}'.format(iteration)
 
     # compute the reward matrix
-    rewards = nn_r.get_rewards(feat_map)
+    # rewards = nn_r.get_rewards(feat_map)
 
     # compute policy
-    #_, policy = value_iteration.value_iteration(P_a, rewards, gamma, error=0.01, deterministic=True)
+    #_, policy = value_iteration.value_iteration(P_a, rewards, gamma, error=0.01, deterministic=False)
 
     # compute rewards and policy at the same time
     #t = time.time()
@@ -338,33 +367,54 @@ def deep_maxent_irl(feat_map, P_a, gamma, trajs, lr, n_iters, sparse):
     #print('tensorflow VI', time.time() - t)
     
     # compute expected svf
-    #mu_exp = compute_state_visition_freq(P_a, gamma, trajs, policy, deterministic=True)
+    #mu_exp = compute_state_visition_freq(P_a, gamma, trajs, policy, deterministic=False)
 
     rewards, values, policy, mu_exp = nn_r.get_policy_svf(feat_map, P_a_t, gamma, p_start_state, 0.000001)
+
+    #assert_all_the_stuff(rewards, policy, values, mu_exp, P_a, P_a_t, N_ACTIONS, N_STATES, trajs, gamma, False)
+
     # compute gradients on rewards:
     grad_r = mu_D - mu_exp
-
-    assert_values, assert_policy = value_iteration.value_iteration(P_a, rewards, gamma, error=0.000001, deterministic=True)
-    assert_values_old, assert_policy_old = value_iteration.value_iteration_old(P_a, rewards, gamma, error=0.000001, deterministic=True)
-
-    assert (np.abs(assert_values - assert_values_old) < 0.0001).all()
-    assert (np.abs(values - assert_values) < 0.0001).all()
-    assert (np.abs(values - assert_values_old) < 0.0001).all()
-
-    assert (np.abs(assert_policy - assert_policy_old) < 0.0001).all()
-    assert (np.abs(policy - assert_policy) < 0.001).all()
-    assert (np.abs(policy - assert_policy_old) < 0.001).all()
-
-    assert (np.abs(mu_exp - compute_state_visition_freq(P_a, gamma, trajs, policy, deterministic=True)) < 0.00001).all()
-    assert (np.abs(mu_exp - compute_state_visition_freq_old(P_a, gamma, trajs, policy, deterministic=True)) < 0.00001).all()
+    grads.append(grad_r)
 
     # apply gradients to the neural network
     grad_theta, l2_loss, grad_norm = nn_r.apply_grads(feat_map, grad_r)
-    
+
+
+  print('grad mean', np.mean(grads, axis=0))
+  print('grad std', np.std(grads, axis=0))
 
   rewards = nn_r.get_rewards(feat_map)
   # return sigmoid(normalize(rewards))
   return normalize(rewards)
+
+def assert_all_the_stuff(rewards, policy, values, mu_exp, P_a, P_a_t, N_ACTIONS, N_STATES, trajs, gamma, deterministic):
+    assert_values, assert_policy = value_iteration.value_iteration(P_a, rewards, gamma, error=0.000001,
+                                                                   deterministic=deterministic)
+    assert_values_old, assert_policy_old = value_iteration.value_iteration_old(P_a, rewards, gamma, error=0.000001,
+                                                                               deterministic=deterministic)
+    assert_values2 = value_iteration.optimal_value(N_STATES, N_ACTIONS, P_a_t, rewards, gamma, threshold=0.000001)
+
+    assert (np.abs(assert_values - assert_values2) < 0.0001).all()
+    assert (np.abs(assert_values - assert_values_old) < 0.0001).all()
+    assert (np.abs(values - assert_values) < 0.0001).all()
+    assert (np.abs(values - assert_values_old) < 0.0001).all()
+
+    print(assert_policy)
+    print(assert_policy_old)
+    print(policy)
+    print(values)
+    print(assert_values)
+    print(rewards)
+    assert (np.abs(assert_policy - assert_policy_old) < 0.0001).all()
+    assert (np.abs(policy - assert_policy) < 0.0001).all()
+    assert (np.abs(policy - assert_policy_old) < 0.0001).all()
+
+    assert (np.abs(mu_exp - compute_state_visition_freq(P_a, gamma, trajs, policy, deterministic=deterministic)) < 0.00001).all()
+    assert (
+    np.abs(mu_exp - compute_state_visition_freq_old(P_a, gamma, trajs, policy, deterministic=deterministic)) < 0.00001).all()
+    
+    print('tf sum SVF', mu_exp.sum())
 
 
 
