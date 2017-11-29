@@ -371,7 +371,7 @@ def deep_maxent_irl(feat_map, P_a, gamma, trajs, lr, n_iters):
 
     rewards, values, policy, mu_exp = nn_r.get_policy_svf(feat_map, P_a_t, gamma, p_start_state, 0.000001)
 
-    assert_all_the_stuff(rewards, policy, values, mu_exp, P_a, P_a_t, N_ACTIONS, N_STATES, trajs, gamma, False)
+    #assert_all_the_stuff(rewards, policy, values, mu_exp, P_a, P_a_t, N_ACTIONS, N_STATES, trajs, gamma, False)
 
     # compute gradients on rewards:
     grad_r = mu_D - mu_exp
