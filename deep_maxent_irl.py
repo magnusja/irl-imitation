@@ -25,7 +25,9 @@ class DeepIRLFC:
     self.deterministic = deterministic
     self.sparse = sparse
 
-    self.sess = tf.Session()
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
+    self.sess = tf.Session(config=config)
     self.input_s, self.reward, self.theta = self._build_network(self.name)
 
     # value iteration
@@ -37,8 +39,10 @@ class DeepIRLFC:
         self.reduce_sum = tf.sparse_reduce_sum
     else:
         self.P_a = tf.placeholder(tf.float32, shape=(n_input, n_actions, n_input))
-        self.reduce_max, self.reduce_max_sparse = tf.reduce_max
-        self.reduce_sum, self.reduce_sum_sparse = tf.reduce_sum
+        self.reduce_max = tf.reduce_max
+        self.reduce_max_sparse = tf.reduce_max
+        self.reduce_sum = tf.reduce_sum
+        self.reduce_sum_sparse = tf.reduce_sum
 
     self.gamma = tf.placeholder(tf.float32)
     self.epsilon = tf.placeholder(tf.float32)
@@ -151,8 +155,8 @@ class DeepIRLFC:
       # One intuition why scaling by T is useful is to stabilize the gradients and avoid that the gradients
       # are getting too high
       # TODO: maybe gradient clipping and normalizing the svf of demonstrations and the policy might help as well
-      # As a side note: This is not mentioned somewhere in the pulications, but for me this countermeasure works
-      # pretty well
+      # As a side note: This is not mentioned somewhere in the pulications (besides this youtube video:
+      # https://youtu.be/d9DlQSJQAoI?t=973), but for me this countermeasure works pretty well
       return mu / self.T
 
 
@@ -250,9 +254,8 @@ def compute_state_visition_freq(P_a, gamma, trajs, policy, deterministic=True):
   # One intuition why scaling by T is useful is to stabilize the gradients and avoid that the gradients
   # are getting too high
   # TODO: maybe gradient clipping and normalizing the svf of demonstrations and the policy might help as well
-  # As a side note: This is not mentioned somewhere in the pulications, but for me this countermeasure works
-  # pretty well (on the other hand using a deterministic policy is anyways never meantioned in one of the
-  # publications, they always describe optimizing with stochastic policies)
+  # As a side note: This is not mentioned somewhere in the pulications (besides this youtube video:
+  # https://youtu.be/d9DlQSJQAoI?t=973), but for me this countermeasure works pretty well
   p /= T
 
   print(time.time() - tt)
@@ -317,8 +320,8 @@ def compute_state_visition_freq_old(P_a, gamma, trajs, policy, deterministic=Tru
     # One intuition why scaling by T is useful is to stabilize the gradients and avoid that the gradients
     # are getting too high
     # TODO: maybe gradient clipping and normalizing the svf of demonstrations and the policy might help as well
-    # As a side note: This is not mentioned somewhere in the pulications, but for me this countermeasure works
-    # pretty well
+    # As a side note: This is not mentioned somewhere in the pulications (besides this youtube video:
+    # https://youtu.be/d9DlQSJQAoI?t=973), but for me this countermeasure works pretty well
     p /= T
     return p
 
