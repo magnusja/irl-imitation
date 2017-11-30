@@ -16,19 +16,34 @@ from utils import *
 class DeepIRLFC:
 
 
-  def __init__(self, n_input, n_actions, lr, T, n_h1=400, n_h2=300, l2=10, deterministic=False, name='deep_irl_fc'):
+  def __init__(self, n_input, n_actions, lr, T, n_h1=400, n_h2=300, l2=10, deterministic=False, sparse=False, name='deep_irl_fc'):
     self.n_input = n_input
     self.lr = lr
     self.n_h1 = n_h1
     self.n_h2 = n_h2
     self.name = name
     self.deterministic = deterministic
+    self.sparse = sparse
 
-    self.sess = tf.Session()
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
+    self.sess = tf.Session(config=config)
     self.input_s, self.reward, self.theta = self._build_network(self.name)
 
     # value iteration
-    self.P_a = tf.placeholder(tf.float32, shape=(n_input, n_actions, n_input))
+    if sparse:
+        self.P_a = tf.sparse_placeholder(tf.float32, shape=(n_input, n_actions, n_input))
+        self.reduce_max_sparse = tf.sparse_reduce_max_sparse
+        self.reduce_sum_sparse = tf.sparse_reduce_sum_sparse
+        self.reduce_max = tf.sparse_reduce_max
+        self.reduce_sum = tf.sparse_reduce_sum
+    else:
+        self.P_a = tf.placeholder(tf.float32, shape=(n_input, n_actions, n_input))
+        self.reduce_max = tf.reduce_max
+        self.reduce_max_sparse = tf.reduce_max
+        self.reduce_sum = tf.reduce_sum
+        self.reduce_sum_sparse = tf.reduce_sum
+
     self.gamma = tf.placeholder(tf.float32)
     self.epsilon = tf.placeholder(tf.float32)
     self.values, self.policy = self._vi(self.reward)
@@ -76,7 +91,7 @@ class DeepIRLFC:
           expected_value = rewards_expanded + self.gamma * old_values
           expected_value = tf.tile(tf.expand_dims(expected_value, 1), [1, tf.shape(self.P_a)[1], 1])
 
-          new_values = tf.reduce_max(tf.reduce_sum(self.P_a * expected_value, axis=2), axis=1)
+          new_values = self.reduce_max(self.reduce_sum_sparse(self.P_a * expected_value, axis=2), axis=1)
           t = t.write(i + 1, new_values)
 
           c = tf.reduce_max(tf.abs(new_values - old_values)) > self.epsilon
@@ -98,9 +113,9 @@ class DeepIRLFC:
       expected_value = tf.tile(tf.expand_dims(expected_value, 1), [1, tf.shape(self.P_a)[1], 1])
 
       if self.deterministic:
-          policy = tf.argmax(tf.reduce_sum(self.P_a * expected_value, axis=2), axis=1)
+          policy = tf.argmax(self.reduce_sum(self.P_a * expected_value, axis=2), axis=1)
       else:
-          policy = tf.reduce_sum(self.P_a * expected_value, axis=2)
+          policy = self.reduce_sum(self.P_a * expected_value, axis=2)
           policy = tf.nn.softmax(policy)
 
       return values, policy
@@ -124,11 +139,11 @@ class DeepIRLFC:
       with tf.variable_scope('svf'):
           if self.deterministic:
               for t in range(self.T - 1):
-                  cur_mu = tf.reduce_sum(mu[t] * P_a_cur_policy, axis=1)
+                  cur_mu = self.reduce_sum(mu[t] * P_a_cur_policy, axis=1)
                   mu.append(cur_mu)
           else:
               for t in range(self.T - 1):
-                  cur_mu = tf.reduce_sum(tf.reduce_sum(tf.tile(tf.expand_dims(tf.expand_dims(mu[t], 1), 2), [1, tf.shape(policy)[1], self.n_input]) * P_a_cur_policy, axis=1), axis=0)
+                  cur_mu = self.reduce_sum(self.reduce_sum_sparse(tf.tile(tf.expand_dims(tf.expand_dims(mu[t], 1), 2), [1, tf.shape(policy)[1], self.n_input]) * P_a_cur_policy, axis=1), axis=0)
                   mu.append(cur_mu)
 
       mu = tf.stack(mu)
@@ -140,8 +155,8 @@ class DeepIRLFC:
       # One intuition why scaling by T is useful is to stabilize the gradients and avoid that the gradients
       # are getting too high
       # TODO: maybe gradient clipping and normalizing the svf of demonstrations and the policy might help as well
-      # As a side note: This is not mentioned somewhere in the pulications, but for me this countermeasure works
-      # pretty well
+      # As a side note: This is not mentioned somewhere in the pulications (besides this youtube video:
+      # https://youtu.be/d9DlQSJQAoI?t=973), but for me this countermeasure works pretty well
       return mu / self.T
 
 
@@ -239,9 +254,8 @@ def compute_state_visition_freq(P_a, gamma, trajs, policy, deterministic=True):
   # One intuition why scaling by T is useful is to stabilize the gradients and avoid that the gradients
   # are getting too high
   # TODO: maybe gradient clipping and normalizing the svf of demonstrations and the policy might help as well
-  # As a side note: This is not mentioned somewhere in the pulications, but for me this countermeasure works
-  # pretty well (on the other hand using a deterministic policy is anyways never meantioned in one of the
-  # publications, they always describe optimizing with stochastic policies)
+  # As a side note: This is not mentioned somewhere in the pulications (besides this youtube video:
+  # https://youtu.be/d9DlQSJQAoI?t=973), but for me this countermeasure works pretty well
   p /= T
 
   print(time.time() - tt)
@@ -306,13 +320,13 @@ def compute_state_visition_freq_old(P_a, gamma, trajs, policy, deterministic=Tru
     # One intuition why scaling by T is useful is to stabilize the gradients and avoid that the gradients
     # are getting too high
     # TODO: maybe gradient clipping and normalizing the svf of demonstrations and the policy might help as well
-    # As a side note: This is not mentioned somewhere in the pulications, but for me this countermeasure works
-    # pretty well
+    # As a side note: This is not mentioned somewhere in the pulications (besides this youtube video:
+    # https://youtu.be/d9DlQSJQAoI?t=973), but for me this countermeasure works pretty well
     p /= T
     return p
 
 
-def deep_maxent_irl(feat_map, P_a, gamma, trajs, lr, n_iters):
+def deep_maxent_irl(feat_map, P_a, gamma, trajs, lr, n_iters, sparse):
   """
   Maximum Entropy Inverse Reinforcement Learning (Maxent IRL)
 
@@ -335,13 +349,17 @@ def deep_maxent_irl(feat_map, P_a, gamma, trajs, lr, n_iters):
   N_STATES, _, N_ACTIONS = np.shape(P_a)
 
   # init nn model
-  nn_r = DeepIRLFC(feat_map.shape[1], N_ACTIONS, lr, len(trajs[0]), 3, 3, deterministic=False)
+  nn_r = DeepIRLFC(feat_map.shape[1], N_ACTIONS, lr, len(trajs[0]), 3, 3, deterministic=False, sparse=sparse)
 
   # find state visitation frequencies using demonstrations
   mu_D = demo_svf(trajs, N_STATES)
   p_start_state = start_state_probs(trajs, N_STATES)
 
   P_a_t = P_a.transpose(0, 2, 1)
+  if sparse:
+    mask = P_a_t > 0
+    indices = np.argwhere(mask)
+    P_a_t = tf.SparseTensorValue(indices, P_a_t[mask], P_a_t.shape)
 
   grads = list()
 
