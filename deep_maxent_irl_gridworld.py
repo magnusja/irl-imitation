@@ -95,6 +95,7 @@ def main():
   
   # use identity matrix as feature
   feat_map = np.eye(N_STATES)
+  #feat_map = np.random.rand(N_STATES,N_STATES)
 
   trajs = generate_demonstrations(gw, policy_gt, n_trajs=N_TRAJS, len_traj=L_TRAJ, rand_start=RAND_START)
 
@@ -106,7 +107,7 @@ def main():
 
   values, policy = value_iteration.value_iteration(P_a, rewards, GAMMA, error=0.01, deterministic=True)
 
-  #print('evd', expected_value_diff(P_a, rewards, rewards_gt, GAMMA, mu, values_gt, policy))
+  print('evd', value_iteration.expected_value_diff(P_a, rewards_gt, GAMMA, start_state_probs(trajs, N_STATES), values_gt, policy))
 
   # plots
   plt.figure(figsize=(20,4))

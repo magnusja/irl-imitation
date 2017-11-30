@@ -391,6 +391,47 @@ def optimal_value(n_states, n_actions, transition_probabilities, reward,
 
     return v
 
+def value_parallel(policy, P_a, rewards, gamma, threshold=1e-2):
+    deterministic = len(policy.shape) == 1
+    N_STATES, _, N_ACTIONS = np.shape(P_a)
+
+    values = np.zeros([N_STATES])
+
+    num_cpus = multiprocessing.cpu_count()
+    chunk_size = N_STATES // num_cpus
+    if chunk_size == 0:
+        chunk_size = N_STATES
+
+    rewards_expanded = rewards[:, np.newaxis].repeat(N_STATES, axis=1)
+    
+    if deterministic:
+        P_az = P_a[np.arange(0, N_STATES), :, policy]
+    else:
+        P_a = P_a.transpose(0, 2, 1)
+
+    # estimate values
+    while True:
+        values_tmp = values.copy()
+
+        def step(start, end):
+            expected_value = rewards_expanded[start:end, :] + gamma * values_tmp
+            #expected_value = expected_value[:, :, np.newaxis].repeat(N_ACTIONS, axis=2)
+            #expected_value = np.transpose(expected_value, (0, 2, 1))
+            values[start:end] = (P_az[start:end, :] * expected_value).sum(axis=1)
+
+        with ThreadPoolExecutor(max_workers=num_cpus) as e:
+            futures = list()
+            for i in range(0, N_STATES, chunk_size):
+                futures.append(e.submit(step, i, min(N_STATES, i + chunk_size)))
+
+            for f in futures:
+                # Force throwing an exception if thrown by step()
+                f.result()
+
+        if np.max(np.abs(values - values_tmp)) < threshold:
+            break
+
+    return values
 
 def value(policy, n_states, transition_probabilities, reward, discount,
                     threshold=1e-2):
@@ -412,18 +453,22 @@ def value(policy, n_states, transition_probabilities, reward, discount,
 
     diff = float("inf")
     while diff > threshold:
+        values_tmp = v.copy()
         diff = 0
         for s in range(n_states):
-            vs = v[s]
+            vs = values_tmp[s]
             a = policy[s]
             v[s] = sum(transition_probabilities[s, a, k] *
-                       (reward[k] + discount * v[k])
+                       (reward[s] + discount * values_tmp[k])
                        for k in range(n_states))
             diff = max(diff, abs(vs - v[s]))
 
     return v
 
-def expected_value_diff(P_a, rewards, true_rewards, gamma, p_start, optimal_value, policy, error=0.01, deterministic=True):
-  v = value(policy, P_a.shape[0], P_a.transpose(0, 2, 1), true_rewards, gamma)
+def expected_value_diff(P_a, true_rewards, gamma, p_start, optimal_value, policy):
+  v = value_parallel(policy, P_a, true_rewards, gamma)
+  v_old = value(policy, P_a.shape[0], P_a.transpose(0, 2, 1), true_rewards, gamma)
+
+  assert (np.abs(v - v_old) < 0.001).all()
 
   return optimal_value.dot(p_start) - v.dot(p_start)
