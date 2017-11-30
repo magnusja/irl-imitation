@@ -133,19 +133,16 @@ class DeepIRLFC:
 
       mu = tf.stack(mu)
       mu = tf.reduce_sum(mu, axis=0)
-      if self.deterministic:
-          # NOTE: In the deterministic case it helps to scale the svf by T to recover the reward properly
-          # I noticed that if it is not scaled by T then the recovered reward and the resulting value function
-          # have extremely low values (usually < 0.01). With such low values it is hard to actually recover a
-          # difference in the value of states (i.e. if only the last few digits after the comma differ).
-          # One intuition why scaling by T is useful is to stabilize the gradients and avoid that the gradients
-          # are getting too high
-          # TODO: maybe gradient clipping and normalizing the svf of demonstrations and the policy might help as well
-          # As a side note: This is not mentioned somewhere in the pulications, but for me this countermeasure works
-          # pretty well (on the other hand using a deterministic policy is anyways never meantioned in one of the
-          # publications, they always describe optimizing with stochastic policies)
-          mu /= self.T
-      return mu
+      # NOTE: it helps to scale the svf by T to recover the reward properly
+      # I noticed that if it is not scaled by T then the recovered reward and the resulting value function
+      # have extremely low values (usually < 0.01). With such low values it is hard to actually recover a
+      # difference in the value of states (i.e. if only the last few digits after the comma differ).
+      # One intuition why scaling by T is useful is to stabilize the gradients and avoid that the gradients
+      # are getting too high
+      # TODO: maybe gradient clipping and normalizing the svf of demonstrations and the policy might help as well
+      # As a side note: This is not mentioned somewhere in the pulications, but for me this countermeasure works
+      # pretty well
+      return mu / self.T
 
 
   def get_theta(self):
@@ -235,18 +232,17 @@ def compute_state_visition_freq(P_a, gamma, trajs, policy, deterministic=True):
 
   p = np.sum(mu, 1)
 
-  if deterministic:
-      # NOTE: In the deterministic case it helps to scale the svf by T to recover the reward properly
-      # I noticed that if it is not scaled by T then the recovered reward and the resulting value function
-      # have extremely low values (usually < 0.01). With such low values it is hard to actually recover a
-      # difference in the value of states (i.e. if only the last few digits after the comma differ).
-      # One intuition why scaling by T is useful is to stabilize the gradients and avoid that the gradients
-      # are getting too high
-      # TODO: maybe gradient clipping and normalizing the svf of demonstrations and the policy might help as well
-      # As a side note: This is not mentioned somewhere in the pulications, but for me this countermeasure works
-      # pretty well (on the other hand using a deterministic policy is anyways never meantioned in one of the
-      # publications, they always describe optimizing with stochastic policies)
-      p /= T
+  # NOTE: it helps to scale the svf by T to recover the reward properly
+  # I noticed that if it is not scaled by T then the recovered reward and the resulting value function
+  # have extremely low values (usually < 0.01). With such low values it is hard to actually recover a
+  # difference in the value of states (i.e. if only the last few digits after the comma differ).
+  # One intuition why scaling by T is useful is to stabilize the gradients and avoid that the gradients
+  # are getting too high
+  # TODO: maybe gradient clipping and normalizing the svf of demonstrations and the policy might help as well
+  # As a side note: This is not mentioned somewhere in the pulications, but for me this countermeasure works
+  # pretty well (on the other hand using a deterministic policy is anyways never meantioned in one of the
+  # publications, they always describe optimizing with stochastic policies)
+  p /= T
 
   print(time.time() - tt)
   return p
@@ -302,18 +298,17 @@ def compute_state_visition_freq_old(P_a, gamma, trajs, policy, deterministic=Tru
 
     p = np.sum(mu, 1)
     print('SUM SVF', p.sum())
-    if deterministic:
-        # NOTE: In the deterministic case it helps to scale the svf by T to recover the reward properly
-        # I noticed that if it is not scaled by T then the recovered reward and the resulting value function
-        # have extremely low values (usually < 0.01). With such low values it is hard to actually recover a
-        # difference in the value of states (i.e. if only the last few digits after the comma differ).
-        # One intuition why scaling by T is useful is to stabilize the gradients and avoid that the gradients
-        # are getting too high
-        # TODO: maybe gradient clipping and normalizing the svf of demonstrations and the policy might help as well
-        # As a side note: This is not mentioned somewhere in the pulications, but for me this countermeasure works
-        # pretty well (on the other hand using a deterministic policy is anyways never meantioned in one of the
-        # publications, they always describe optimizing with stochastic policies)
-        p /= T
+
+    # NOTE: it helps to scale the svf by T to recover the reward properly
+    # I noticed that if it is not scaled by T then the recovered reward and the resulting value function
+    # have extremely low values (usually < 0.01). With such low values it is hard to actually recover a
+    # difference in the value of states (i.e. if only the last few digits after the comma differ).
+    # One intuition why scaling by T is useful is to stabilize the gradients and avoid that the gradients
+    # are getting too high
+    # TODO: maybe gradient clipping and normalizing the svf of demonstrations and the policy might help as well
+    # As a side note: This is not mentioned somewhere in the pulications, but for me this countermeasure works
+    # pretty well
+    p /= T
     return p
 
 
