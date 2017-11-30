@@ -1,4 +1,13 @@
 # irl-imitation
+
+##### Differences from forked repo
+* Fixed issue https://github.com/stormmax/irl-imitation/issues/1
+* Implemented parallel value iteration and state visitation frequency calculation (numpy, CPU
+* Implemented value iteration and state visitation in tensorflow (GPU, greatly enhances speed!)
+* Implemented expected value difference evaluation metric (https://github.com/MatthewJA/Inverse-Reinforcement-Learning/blob/master/irl/maxent.py#L208)
+
+
+
 Implementations of some model-based Inverse Reinforcement Learning (IRL) algorithms in python/Tensorflow. Mainly for educational purpose. (WIP)
 
 ```
