@@ -470,7 +470,7 @@ def value(policy, n_states, transition_probabilities, reward, discount,
 
 def expected_value_diff(P_a, true_rewards, gamma, p_start, optimal_value, policy):
   v = value_parallel(policy, P_a, true_rewards, gamma)
-  v_old = value(policy, P_a.shape[0], P_a.transpose(0, 2, 1), true_rewards, gamma)
+  #v_old = value(policy, P_a.shape[0], P_a.transpose(0, 2, 1), true_rewards, gamma)
 
   #if len(policy.shape) == 1:
   #  assert (np.abs(v - v_old) < 0.001).all()
