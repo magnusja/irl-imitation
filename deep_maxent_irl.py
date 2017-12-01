@@ -132,7 +132,7 @@ class DeepIRLFC:
         P_a_cur_policy = tf.gather_nd(tf.transpose(self.P_a, (0, 2, 1)), indices)
         P_a_cur_policy = tf.transpose(P_a_cur_policy, (1, 0))
       else:
-        P_a_cur_policy = self.P_a * tf.tile(tf.expand_dims(policy, 2), [1, 1, self.n_input])
+        P_a_cur_policy = self.P_a * tf.expand_dims(policy, 2)
 
       mu = list()
       mu.append(self.mu)
