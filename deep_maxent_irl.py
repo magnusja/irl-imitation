@@ -16,33 +16,40 @@ from utils import *
 class DeepIRLFC:
 
 
-  def __init__(self, n_input, n_actions, lr, T, n_h1=400, n_h2=300, l2=10, deterministic=False, sparse=False, name='deep_irl_fc'):
-    self.n_input = n_input
+  def __init__(self, n_input, n_actions, lr, T, n_h1=400, n_h2=300, l2=10, deterministic=False, sparse=False, conv=False, name='deep_irl_fc'):
+    if len(n_input) > 1:
+        self.height, self.width = n_input
+        self.n_input = self.height * self.width
+    else:
+        self.n_input = n_input[0]
     self.lr = lr
     self.n_h1 = n_h1
     self.n_h2 = n_h2
     self.name = name
     self.deterministic = deterministic
     self.sparse = sparse
+    self.conv = conv
 
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True
     self.sess = tf.Session(config=config)
-    self.input_s, self.reward, self.theta = self._build_network(self.name)
+    self.input_s, self.reward, self.theta = self._build_network(self.name, conv)
 
     # value iteration
     if sparse:
-        self.P_a = tf.sparse_placeholder(tf.float32, shape=(n_input, n_actions, n_input))
+        self.P_a = tf.sparse_placeholder(tf.float32, shape=(self.n_input, n_actions, self.n_input))
         self.reduce_max_sparse = tf.sparse_reduce_max_sparse
         self.reduce_sum_sparse = tf.sparse_reduce_sum_sparse
         self.reduce_max = tf.sparse_reduce_max
         self.reduce_sum = tf.sparse_reduce_sum
+        self.sparse_transpose = tf.sparse_transpose
     else:
-        self.P_a = tf.placeholder(tf.float32, shape=(n_input, n_actions, n_input))
+        self.P_a = tf.placeholder(tf.float32, shape=(self.n_input, n_actions, self.n_input))
         self.reduce_max = tf.reduce_max
         self.reduce_max_sparse = tf.reduce_max
         self.reduce_sum = tf.reduce_sum
         self.reduce_sum_sparse = tf.reduce_sum
+        self.sparse_transpose = tf.transpose
 
     self.gamma = tf.placeholder(tf.float32)
     self.epsilon = tf.placeholder(tf.float32)
@@ -50,13 +57,13 @@ class DeepIRLFC:
 
     # state visitation frequency
     self.T = T
-    self.mu = tf.placeholder(tf.float32, n_input, name='mu_placerholder')
+    self.mu = tf.placeholder(tf.float32, self.n_input, name='mu_placerholder')
 
     self.svf = self._svf(self.policy)
 
     self.optimizer = tf.train.GradientDescentOptimizer(lr)
     
-    self.grad_r = tf.placeholder(tf.float32, [n_input, 1])
+    self.grad_r = tf.placeholder(tf.float32, [self.n_input, 1])
     self.l2_loss = tf.add_n([tf.nn.l2_loss(v) for v in self.theta])
     self.grad_l2 = tf.gradients(self.l2_loss, self.theta)
 
@@ -70,26 +77,36 @@ class DeepIRLFC:
     self.sess.run(tf.global_variables_initializer())
 
 
-  def _build_network(self, name):
-    input_s = tf.placeholder(tf.float32, [self.n_input, self.n_input])
-    with tf.variable_scope(name):
-      fc1 = tf_utils.fc(input_s, self.n_h1, scope="fc1", activation_fn=tf.nn.elu,
-        initializer=tf.contrib.layers.variance_scaling_initializer(mode="FAN_IN"))
-      fc2 = tf_utils.fc(fc1, self.n_h2, scope="fc2", activation_fn=tf.nn.elu,
-        initializer=tf.contrib.layers.variance_scaling_initializer(mode="FAN_IN"))
-      reward = tf_utils.fc(fc2, 1, scope="reward")
-    theta = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=name)
-    return input_s, tf.squeeze(reward), theta
+  def _build_network(self, name, conv):
+    if conv:
+        input_s = tf.placeholder(tf.float32, [None, self.width, self.height, 1])
+        with tf.variable_scope(name):
+          #conv1 = tf_utils.conv2d(input_s, 64, (1, 1), 1)
+          #conv2 = tf_utils.conv2d(conv1, 32, (1, 1), 1)
+          #conv3 = tf_utils.conv2d(conv2, 32, (1, 1), 1)
+          reward = tf_utils.conv2d(input_s, 1, (1, 1), 1)
+        theta = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=name)
+        return input_s, tf.squeeze(tf.reshape(reward, (-1, self.n_input))), theta
+    else:
+        input_s = tf.placeholder(tf.float32, [None, self.n_input])
+        with tf.variable_scope(name):
+          fc1 = tf_utils.fc(input_s, self.n_h1, scope="fc1", activation_fn=tf.nn.elu,
+            initializer=tf.contrib.layers.variance_scaling_initializer(mode="FAN_IN"))
+          fc2 = tf_utils.fc(fc1, self.n_h2, scope="fc2", activation_fn=tf.nn.elu,
+            initializer=tf.contrib.layers.variance_scaling_initializer(mode="FAN_IN"))
+          reward = tf_utils.fc(fc2, self.n_input, scope="reward")
+        theta = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=name)
+        return input_s, tf.squeeze(reward), theta
 
   def _vi(self, rewards):
 
-      rewards_expanded = tf.tile(tf.expand_dims(rewards, 1), [1, self.n_input])
+      rewards_expanded = rewards #tf.tile(tf.expand_dims(rewards, 1), [1, self.n_input])
 
       def body(i, c, t):
           old_values = t.read(i)
 
           expected_value = rewards_expanded + self.gamma * old_values
-          expected_value = tf.tile(tf.expand_dims(expected_value, 1), [1, tf.shape(self.P_a)[1], 1])
+          #expected_value = tf.tile(tf.expand_dims(expected_value, 1), [1, tf.shape(self.P_a)[1], 1])
 
           new_values = self.reduce_max(self.reduce_sum_sparse(self.P_a * expected_value, axis=2), axis=1)
           t = t.write(i + 1, new_values)
@@ -110,7 +127,7 @@ class DeepIRLFC:
       values = values.read(i)
 
       expected_value = rewards_expanded + self.gamma * values
-      expected_value = tf.tile(tf.expand_dims(expected_value, 1), [1, tf.shape(self.P_a)[1], 1])
+      #expected_value = tf.tile(tf.expand_dims(expected_value, 1), [1, tf.shape(self.P_a)[1], 1])
 
       if self.deterministic:
           policy = tf.argmax(self.reduce_sum(self.P_a * expected_value, axis=2), axis=1)
@@ -129,7 +146,7 @@ class DeepIRLFC:
         grid = tf.meshgrid(r, r)
         indices = tf.stack([grid[1], grid[0], tiled], axis=2)
         
-        P_a_cur_policy = tf.gather_nd(tf.transpose(self.P_a, (0, 2, 1)), indices)
+        P_a_cur_policy = tf.gather_nd(self.sparse_transpose(self.P_a, (0, 2, 1)), indices)
         P_a_cur_policy = tf.transpose(P_a_cur_policy, (1, 0))
       else:
         P_a_cur_policy = self.P_a * tf.expand_dims(policy, 2)
@@ -143,7 +160,10 @@ class DeepIRLFC:
                   mu.append(cur_mu)
           else:
               for t in range(self.T - 1):
-                  cur_mu = self.reduce_sum(self.reduce_sum_sparse(tf.tile(tf.expand_dims(tf.expand_dims(mu[t], 1), 2), [1, tf.shape(policy)[1], self.n_input]) * P_a_cur_policy, axis=1), axis=0)
+                  cur_mu = self.reduce_sum(self.reduce_sum_sparse(tf.tile(tf.expand_dims(tf.expand_dims(mu[t], 1), 2),
+                                                                          [1, tf.shape(policy)[1],
+                                                                           self.n_input]) * P_a_cur_policy, axis=1),
+                                           axis=0)
                   mu.append(cur_mu)
 
       mu = tf.stack(mu)
@@ -164,6 +184,10 @@ class DeepIRLFC:
     return self.sess.run(self.theta)
 
   def get_rewards(self, states):
+    if self.conv:
+        states = np.expand_dims(np.expand_dims(states, axis=0), axis=-1)
+    else:
+        states = np.expand_dims(states, axis=0)
     rewards = self.sess.run(self.reward, feed_dict={self.input_s: states})
     return rewards
 
@@ -172,12 +196,20 @@ class DeepIRLFC:
                          feed_dict={self.input_s: states, self.P_a: P_a, self.gamma: gamma, self.epsilon: epsilon})
 
   def get_policy_svf(self, states, P_a, gamma, p_start_state, epsilon=0.01):
+
+      if self.conv:
+        states = np.expand_dims(np.expand_dims(states, axis=0), axis=-1)
+      else:
+        states = np.expand_dims(states, axis=0)
       return self.sess.run([self.reward, self.values, self.policy, self.svf],
                            feed_dict={self.input_s: states, self.P_a: P_a, self.gamma: gamma, self.mu: p_start_state, self.epsilon: epsilon})
 
   def apply_grads(self, feat_map, grad_r):
     grad_r = np.reshape(grad_r, [-1, 1])
-    feat_map = np.reshape(feat_map, [-1, self.n_input])
+    if self.conv:
+        feat_map = np.expand_dims(np.expand_dims(feat_map, axis=0), axis=-1)
+    else:
+        feat_map = np.expand_dims(feat_map, axis=0)
     _, grad_theta, l2_loss, grad_norms = self.sess.run([self.optimize, self.grad_theta, self.l2_loss, self.grad_norms], 
       feed_dict={self.grad_r: grad_r, self.input_s: feat_map})
     return grad_theta, l2_loss, grad_norms
@@ -326,7 +358,7 @@ def compute_state_visition_freq_old(P_a, gamma, trajs, policy, deterministic=Tru
     return p
 
 
-def deep_maxent_irl(feat_map, P_a, gamma, trajs, lr, n_iters, sparse):
+def deep_maxent_irl(feat_map, P_a, gamma, trajs, lr, n_iters, conv, sparse):
   """
   Maximum Entropy Inverse Reinforcement Learning (Maxent IRL)
 
@@ -349,7 +381,7 @@ def deep_maxent_irl(feat_map, P_a, gamma, trajs, lr, n_iters, sparse):
   N_STATES, _, N_ACTIONS = np.shape(P_a)
 
   # init nn model
-  nn_r = DeepIRLFC(feat_map.shape[1], N_ACTIONS, lr, len(trajs[0]), 3, 3, deterministic=False, sparse=sparse)
+  nn_r = DeepIRLFC(feat_map.shape, N_ACTIONS, lr, len(trajs[0]), 3, 3, deterministic=False, conv=conv, sparse=sparse)
 
   # find state visitation frequencies using demonstrations
   mu_D = demo_svf(trajs, N_STATES)
@@ -383,6 +415,7 @@ def deep_maxent_irl(feat_map, P_a, gamma, trajs, lr, n_iters, sparse):
     #mu_exp = compute_state_visition_freq(P_a, gamma, trajs, policy, deterministic=False)
 
     rewards, values, policy, mu_exp = nn_r.get_policy_svf(feat_map, P_a_t, gamma, p_start_state, 0.000001)
+    #print(rewards)
 
     #assert_all_the_stuff(rewards, policy, values, mu_exp, P_a, P_a_t, N_ACTIONS, N_STATES, trajs, gamma, False)
 
