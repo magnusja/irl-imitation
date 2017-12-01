@@ -372,10 +372,10 @@ def deep_maxent_irl(feat_map, P_a, gamma, trajs, lr, n_iters, conv, sparse):
 
   # tf.set_random_seed(1)
   
-  N_STATES, _, N_ACTIONS = np.shape(P_a)
+  N_STATES, N_ACTIONS = feat_map.shape[0] * feat_map.shape[1], 5
 
   # init nn model
-  nn_r = DeepIRLFC(feat_map.shape, N_ACTIONS, lr, len(trajs[0]), 3, 3, deterministic=False, conv=conv, sparse=sparse)
+  nn_r = DeepIRLFC((feat_map.shape[1], feat_map.shape[0]), N_ACTIONS, lr, len(trajs[0]), 3, 3, deterministic=False, conv=conv, sparse=sparse)
 
   # find state visitation frequencies using demonstrations
   mu_D = demo_svf(trajs, N_STATES)

@@ -111,7 +111,7 @@ def main():
 
   # trajs = generate_demonstrations(gw, policy_gt, n_trajs=N_TRAJS, len_traj=L_TRAJ, rand_start=RAND_START)
 
-  trajs = [[i * j for i in range(20)] for j in range(200)]
+  trajs = [[1 for i in range(ARGS.n_trajs)] for j in range(ARGS.n_trajs)]
 
   
   print 'Deep Max Ent IRL training ..'
