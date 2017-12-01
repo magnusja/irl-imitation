@@ -97,7 +97,8 @@ def main():
   
   # use identity matrix as feature
   #feat_map = np.eye(N_STATES)
-  feat_map = np.random.rand(N_STATES).reshape((H, W))
+  feat_map = np.zeros(N_STATES).reshape((H, W))
+  #feat_map = np.arange(N_STATES).reshape((H, W))
   if ARGS.conv:
     feat_map[H-1, W-1] = -5
     feat_map[0, W-1] = -5
