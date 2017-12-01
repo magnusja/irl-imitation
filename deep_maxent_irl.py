@@ -37,12 +37,14 @@ class DeepIRLFC:
         self.reduce_sum_sparse = tf.sparse_reduce_sum_sparse
         self.reduce_max = tf.sparse_reduce_max
         self.reduce_sum = tf.sparse_reduce_sum
+        self.sparse_transpose = tf.sparse_transpose
     else:
         self.P_a = tf.placeholder(tf.float32, shape=(n_input, n_actions, n_input))
         self.reduce_max = tf.reduce_max
         self.reduce_max_sparse = tf.reduce_max
         self.reduce_sum = tf.reduce_sum
         self.reduce_sum_sparse = tf.reduce_sum
+        self.sparse_transpose = tf.transpose
 
     self.gamma = tf.placeholder(tf.float32)
     self.epsilon = tf.placeholder(tf.float32)
@@ -83,13 +85,13 @@ class DeepIRLFC:
 
   def _vi(self, rewards):
 
-      rewards_expanded = tf.tile(tf.expand_dims(rewards, 1), [1, self.n_input])
+      rewards_expanded = rewards #tf.tile(tf.expand_dims(rewards, 1), [1, self.n_input])
 
       def body(i, c, t):
           old_values = t.read(i)
 
           expected_value = rewards_expanded + self.gamma * old_values
-          expected_value = tf.tile(tf.expand_dims(expected_value, 1), [1, tf.shape(self.P_a)[1], 1])
+          #expected_value = tf.tile(tf.expand_dims(expected_value, 1), [1, tf.shape(self.P_a)[1], 1])
 
           new_values = self.reduce_max(self.reduce_sum_sparse(self.P_a * expected_value, axis=2), axis=1)
           t = t.write(i + 1, new_values)
@@ -110,7 +112,7 @@ class DeepIRLFC:
       values = values.read(i)
 
       expected_value = rewards_expanded + self.gamma * values
-      expected_value = tf.tile(tf.expand_dims(expected_value, 1), [1, tf.shape(self.P_a)[1], 1])
+      #expected_value = tf.tile(tf.expand_dims(expected_value, 1), [1, tf.shape(self.P_a)[1], 1])
 
       if self.deterministic:
           policy = tf.argmax(self.reduce_sum(self.P_a * expected_value, axis=2), axis=1)
@@ -129,7 +131,7 @@ class DeepIRLFC:
         grid = tf.meshgrid(r, r)
         indices = tf.stack([grid[1], grid[0], tiled], axis=2)
         
-        P_a_cur_policy = tf.gather_nd(tf.transpose(self.P_a, (0, 2, 1)), indices)
+        P_a_cur_policy = tf.gather_nd(self.sparse_transpose(self.P_a, (0, 2, 1)), indices)
         P_a_cur_policy = tf.transpose(P_a_cur_policy, (1, 0))
       else:
         P_a_cur_policy = self.P_a * tf.expand_dims(policy, 2)

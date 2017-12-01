@@ -52,7 +52,7 @@ def value_iteration_old(P_a, rewards, gamma, error=0.01, deterministic=True):
 
     for s in range(N_STATES):
       v_s = []
-      values[s] = max([sum([P_a[s, s1, a] * (rewards[s] + gamma * values_tmp[s1]) for s1 in range(N_STATES)]) for a in
+      values[s] = max([sum([P_a[s, s1, a] * (rewards[s1] + gamma * values_tmp[s1]) for s1 in range(N_STATES)]) for a in
                        range(N_ACTIONS)])
 
     if max([abs(values[s] - values_tmp[s]) for s in range(N_STATES)]) < error:
@@ -62,7 +62,7 @@ def value_iteration_old(P_a, rewards, gamma, error=0.01, deterministic=True):
     # generate deterministic policy
     policy = np.zeros([N_STATES])
     for s in range(N_STATES):
-      policy[s] = np.argmax([sum([P_a[s, s1, a] * (rewards[s] + gamma * values[s1])
+      policy[s] = np.argmax([sum([P_a[s, s1, a] * (rewards[s1] + gamma * values[s1])
                                   for s1 in range(N_STATES)])
                              for a in range(N_ACTIONS)])
 
@@ -72,7 +72,7 @@ def value_iteration_old(P_a, rewards, gamma, error=0.01, deterministic=True):
     policy = np.zeros([N_STATES, N_ACTIONS])
     for s in range(N_STATES):
       v_s = np.array(
-        [sum([P_a[s, s1, a] * (rewards[s] + gamma * values[s1]) for s1 in range(N_STATES)]) for a in range(N_ACTIONS)])
+        [sum([P_a[s, s1, a] * (rewards[s1] + gamma * values[s1]) for s1 in range(N_STATES)]) for a in range(N_ACTIONS)])
       policy[s, :] = softmax(v_s).squeeze()
 
 
@@ -110,7 +110,7 @@ def value_iteration(P_a, rewards, gamma, error=0.01, deterministic=True):
   if chunk_size == 0:
     chunk_size = N_STATES
 
-  rewards_expanded = rewards[:, np.newaxis].repeat(N_STATES, axis=1)
+  # rewards_expanded = rewards[:, np.newaxis].repeat(N_STATES, axis=1)
   count = 0
   # estimate values
   while True:
@@ -118,9 +118,10 @@ def value_iteration(P_a, rewards, gamma, error=0.01, deterministic=True):
     values_tmp = values.copy()
 
     def step(start, end):
-      expected_value = rewards_expanded[start:end, :] + gamma * values_tmp
-      expected_value = expected_value[:, :, np.newaxis].repeat(N_ACTIONS, axis=2)
-      expected_value = np.transpose(expected_value, (0, 2, 1))
+      expected_value = rewards + gamma * values_tmp
+      #expected_value = expected_value[:, np.newaxis].repeat(N_STATES, axis=1)
+      #expected_value = expected_value[:, :, np.newaxis].repeat(N_ACTIONS, axis=2)
+      #expected_value = np.transpose(expected_value, (0, 2, 1))
       values[start:end] = (P[start:end, :, :] * expected_value).sum(axis=2).max(axis=1)
 
     with ThreadPoolExecutor(max_workers=num_cpus) as e:
@@ -139,9 +140,10 @@ def value_iteration(P_a, rewards, gamma, error=0.01, deterministic=True):
       print('VI', count)
       break
 
-  expected_value = rewards_expanded + gamma * values
-  expected_value = expected_value[:, :, np.newaxis].repeat(N_ACTIONS, axis=2)
-  expected_value = np.transpose(expected_value, (0, 2, 1))
+  expected_value = rewards + gamma * values_tmp
+  #expected_value = expected_value[:, np.newaxis].repeat(N_STATES, axis=1)
+  #expected_value = expected_value[:, :, np.newaxis].repeat(N_ACTIONS, axis=2)
+  #expected_value = np.transpose(expected_value, (0, 2, 1))
 
 
   if deterministic:
