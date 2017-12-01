@@ -90,15 +90,20 @@ def main():
   gw = gridworld.GridWorld(rmap_gt, {}, 1 - ACT_RAND)
 
   rewards_gt = np.reshape(rmap_gt, H*W, order='F')
-  P_a = gw.get_transition_mat()
+  if ARGS.sparse:
+    P_a = gw.get_transition_mat_sparse()
+  else:
+    P_a = gw.get_transition_mat()
 
-  values_gt, policy_gt = value_iteration.value_iteration(P_a, rewards_gt, GAMMA, error=0.01, deterministic=True)
+  #values_gt, policy_gt = value_iteration.value_iteration(P_a, rewards_gt, GAMMA, error=0.01, deterministic=True)
   
   # use identity matrix as feature
   feat_map = np.eye(N_STATES)
   #feat_map = np.random.rand(N_STATES,N_STATES)
 
-  trajs = generate_demonstrations(gw, policy_gt, n_trajs=N_TRAJS, len_traj=L_TRAJ, rand_start=RAND_START)
+  # trajs = generate_demonstrations(gw, policy_gt, n_trajs=N_TRAJS, len_traj=L_TRAJ, rand_start=RAND_START)
+
+  trajs = [[i * j for i in range(20)] for j in range(200)]
 
   
   print 'Deep Max Ent IRL training ..'
@@ -106,21 +111,21 @@ def main():
   rewards = deep_maxent_irl(feat_map, P_a, GAMMA, trajs, LEARNING_RATE, N_ITERS, ARGS.sparse)
   print('time for dirl', time.time() - t)
 
-  values, policy = value_iteration.value_iteration(P_a, rewards, GAMMA, error=0.01, deterministic=True)
+  # values, policy = value_iteration.value_iteration(P_a, rewards, GAMMA, error=0.01, deterministic=True)
 
-  print('evd', value_iteration.expected_value_diff(P_a, rewards_gt, GAMMA, start_state_probs(trajs, N_STATES), values_gt, policy))
+  # print('evd', value_iteration.expected_value_diff(P_a, rewards_gt, GAMMA, start_state_probs(trajs, N_STATES), values_gt, policy))
 
   # plots
-  plt.figure(figsize=(20,4))
-  plt.subplot(1, 4, 1)
-  img_utils.heatmap2d(np.reshape(rewards_gt, (H,W), order='F'), 'Rewards Map - Ground Truth', block=False)
-  plt.subplot(1, 4, 2)
-  img_utils.heatmap2d(np.reshape(values_gt, (H,W), order='F'), 'Value Map - Ground Truth', block=False)
-  plt.subplot(1, 4, 3)
-  img_utils.heatmap2d(np.reshape(rewards, (H,W), order='F'), 'Reward Map - Recovered', block=False)
-  plt.subplot(1, 4, 4)
-  img_utils.heatmap2d(np.reshape(values, (H,W), order='F'), 'Value Map - Recovered', block=False)
-  plt.show()
+  # plt.figure(figsize=(20,4))
+  # plt.subplot(1, 4, 1)
+  # img_utils.heatmap2d(np.reshape(rewards_gt, (H,W), order='F'), 'Rewards Map - Ground Truth', block=False)
+  # plt.subplot(1, 4, 2)
+  # img_utils.heatmap2d(np.reshape(values_gt, (H,W), order='F'), 'Value Map - Ground Truth', block=False)
+  # plt.subplot(1, 4, 3)
+  # img_utils.heatmap2d(np.reshape(rewards, (H,W), order='F'), 'Reward Map - Recovered', block=False)
+  # plt.subplot(1, 4, 4)
+  # img_utils.heatmap2d(np.reshape(values, (H,W), order='F'), 'Value Map - Recovered', block=False)
+  # plt.show()
 
 
 

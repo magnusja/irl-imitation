@@ -325,6 +325,30 @@ class GridWorld(object):
           P_a[si, sj, a] = prob
     return P_a
 
+  def get_transition_mat_sparse(self):
+    """
+    get transition dynamics of the gridworld
+
+    return:
+      P_a         sparse matrix: values, index
+    """
+    N_STATES = self.height*self.width
+    N_ACTIONS = len(self.actions)
+    values = list()
+    indices = list()
+    for si in range(N_STATES):
+      posi = self.idx2pos(si)
+      for a in range(N_ACTIONS):
+        probs = self.get_transition_states_and_probs(posi, a)
+
+        for posj, prob in probs:
+          sj = self.pos2idx(posj)
+          # Prob of si to sj given action a
+          if prob > 0:
+            indices.append((si, a, sj))
+            values.append(prob)
+    return indices, values
+
   def get_values_mat(self, values):
     """
     inputs:
