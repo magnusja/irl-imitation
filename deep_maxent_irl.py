@@ -348,7 +348,7 @@ def deep_maxent_irl(feat_map, P_a, gamma, trajs, lr, n_iters, sparse):
 
   # tf.set_random_seed(1)
   
-  N_STATES, _, N_ACTIONS = 100 * 100, 1, 5
+  N_STATES, _, N_ACTIONS = 250 * 250, 1, 5
 
   # init nn model
   nn_r = DeepIRLFC(feat_map.shape[1], N_ACTIONS, lr, len(trajs[0]), 3, 3, deterministic=False, sparse=sparse)
@@ -384,7 +384,17 @@ def deep_maxent_irl(feat_map, P_a, gamma, trajs, lr, n_iters, sparse):
     # compute expected svf
     #mu_exp = compute_state_visition_freq(P_a, gamma, trajs, policy, deterministic=False)
 
-    rewards, values, policy, mu_exp = nn_r.get_policy_svf(feat_map, P_a_t, gamma, p_start_state, 0.000001)
+    builder = tf.profiler.ProfileOptionBuilder
+    opts = builder(builder.time_and_memory()).order_by('micros').build()
+    with tf.contrib.tfprof.ProfileContext('/tmp/train_dir',
+                                          trace_steps=[],
+                                          dump_steps=[]) as pctx:
+        # Enable tracing for next session.run.
+        pctx.trace_next_step()
+        # Dump the profile to '/tmp/train_dir' after the step.
+        pctx.dump_next_step()
+        rewards, values, policy, mu_exp = nn_r.get_policy_svf(feat_map, P_a_t, gamma, p_start_state, 0.000001)
+        pctx.profiler.profile_operations(options=opts)
 
     #assert_all_the_stuff(rewards, policy, values, mu_exp, P_a, P_a_t, N_ACTIONS, N_STATES, trajs, gamma, False)
 
