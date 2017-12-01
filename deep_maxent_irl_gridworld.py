@@ -97,7 +97,14 @@ def main():
   
   # use identity matrix as feature
   #feat_map = np.eye(N_STATES)
-  feat_map = np.arange(N_STATES)
+  feat_map = np.random.rand(N_STATES).reshape((H, W))
+  if ARGS.conv:
+    feat_map[H-1, W-1] = -5
+    feat_map[0, W-1] = -5
+    feat_map[H-1, 0] = -5
+  else:
+    feat_map = feat_map.reshape(N_STATES)
+  #feat_map = rmap_gt
 
   trajs = generate_demonstrations(gw, policy_gt, n_trajs=N_TRAJS, len_traj=L_TRAJ, rand_start=RAND_START)
 
