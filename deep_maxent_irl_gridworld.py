@@ -28,6 +28,7 @@ PARSER.set_defaults(rand_start=True)
 PARSER.add_argument('-lr', '--learning_rate', default=0.02, type=float, help='learning rate')
 PARSER.add_argument('-ni', '--n_iters', default=20, type=int, help='number of iterations')
 PARSER.add_argument('-s', '--sparse', default=False, action='store_true', help='flag to use sparse tensors in tf')
+PARSER.add_argument('-c', '--conv', default=False, action='store_true', help='flag to use conv layers instead of fc')
 ARGS = PARSER.parse_args()
 print ARGS
 
@@ -98,8 +99,15 @@ def main():
   #values_gt, policy_gt = value_iteration.value_iteration(P_a, rewards_gt, GAMMA, error=0.01, deterministic=True)
   
   # use identity matrix as feature
-  feat_map = np.eye(N_STATES)
-  #feat_map = np.random.rand(N_STATES,N_STATES)
+  #feat_map = np.eye(N_STATES)
+  feat_map = np.random.rand(N_STATES).reshape((H, W))
+  if ARGS.conv:
+    feat_map[H-1, W-1] = -5
+    feat_map[0, W-1] = -5
+    feat_map[H-1, 0] = -5
+  else:
+    feat_map = feat_map.reshape(N_STATES)
+  #feat_map = rmap_gt
 
   # trajs = generate_demonstrations(gw, policy_gt, n_trajs=N_TRAJS, len_traj=L_TRAJ, rand_start=RAND_START)
 
@@ -108,7 +116,7 @@ def main():
   
   print 'Deep Max Ent IRL training ..'
   t = time.time()
-  rewards = deep_maxent_irl(feat_map, P_a, GAMMA, trajs, LEARNING_RATE, N_ITERS, ARGS.sparse)
+  rewards = deep_maxent_irl(feat_map, P_a, GAMMA, trajs, LEARNING_RATE, N_ITERS, ARGS.conv, ARGS.sparse)
   print('time for dirl', time.time() - t)
 
   # values, policy = value_iteration.value_iteration(P_a, rewards, GAMMA, error=0.01, deterministic=True)
