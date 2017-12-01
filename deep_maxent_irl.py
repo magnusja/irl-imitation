@@ -73,13 +73,13 @@ class DeepIRLFC:
 
 
   def _build_network(self, name):
-    input_s = tf.placeholder(tf.float32, [self.n_input, self.n_input])
+    input_s = tf.placeholder(tf.float32, [None, 100])
     with tf.variable_scope(name):
       fc1 = tf_utils.fc(input_s, self.n_h1, scope="fc1", activation_fn=tf.nn.elu,
         initializer=tf.contrib.layers.variance_scaling_initializer(mode="FAN_IN"))
       fc2 = tf_utils.fc(fc1, self.n_h2, scope="fc2", activation_fn=tf.nn.elu,
         initializer=tf.contrib.layers.variance_scaling_initializer(mode="FAN_IN"))
-      reward = tf_utils.fc(fc2, 1, scope="reward")
+      reward = tf_utils.fc(fc2, 100, scope="reward")
     theta = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=name)
     return input_s, tf.squeeze(reward), theta
 
@@ -166,6 +166,7 @@ class DeepIRLFC:
     return self.sess.run(self.theta)
 
   def get_rewards(self, states):
+    states = np.expand_dims(states, axis=0)
     rewards = self.sess.run(self.reward, feed_dict={self.input_s: states})
     return rewards
 
@@ -174,6 +175,7 @@ class DeepIRLFC:
                          feed_dict={self.input_s: states, self.P_a: P_a, self.gamma: gamma, self.epsilon: epsilon})
 
   def get_policy_svf(self, states, P_a, gamma, p_start_state, epsilon=0.01):
+      states = np.expand_dims(states, axis=0)
       return self.sess.run([self.reward, self.values, self.policy, self.svf],
                            feed_dict={self.input_s: states, self.P_a: P_a, self.gamma: gamma, self.mu: p_start_state, self.epsilon: epsilon})
 
@@ -351,7 +353,7 @@ def deep_maxent_irl(feat_map, P_a, gamma, trajs, lr, n_iters, sparse):
   N_STATES, _, N_ACTIONS = np.shape(P_a)
 
   # init nn model
-  nn_r = DeepIRLFC(feat_map.shape[1], N_ACTIONS, lr, len(trajs[0]), 3, 3, deterministic=False, sparse=sparse)
+  nn_r = DeepIRLFC(N_STATES, N_ACTIONS, lr, len(trajs[0]), 3, 3, deterministic=False, sparse=sparse)
 
   # find state visitation frequencies using demonstrations
   mu_D = demo_svf(trajs, N_STATES)

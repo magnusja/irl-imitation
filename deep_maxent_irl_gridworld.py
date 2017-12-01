@@ -95,8 +95,8 @@ def main():
   values_gt, policy_gt = value_iteration.value_iteration(P_a, rewards_gt, GAMMA, error=0.01, deterministic=True)
   
   # use identity matrix as feature
-  feat_map = np.eye(N_STATES)
-  #feat_map = np.random.rand(N_STATES,N_STATES)
+  #feat_map = np.eye(N_STATES)
+  feat_map = np.arange(N_STATES)
 
   trajs = generate_demonstrations(gw, policy_gt, n_trajs=N_TRAJS, len_traj=L_TRAJ, rand_start=RAND_START)
 
