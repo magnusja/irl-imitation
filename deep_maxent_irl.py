@@ -17,8 +17,11 @@ class DeepIRLFC:
 
 
   def __init__(self, n_input, n_actions, lr, T, n_h1=400, n_h2=300, l2=10, deterministic=False, sparse=False, conv=False, name='deep_irl_fc'):
-    self.height, self.width = n_input
-    self.n_input = self.height * self.width
+    if len(n_input) > 1:
+        self.height, self.width = n_input
+        self.n_input = self.height * self.width
+    else:
+        self.n_input = n_input[0]
     self.lr = lr
     self.n_h1 = n_h1
     self.n_h2 = n_h2
@@ -157,7 +160,10 @@ class DeepIRLFC:
                   mu.append(cur_mu)
           else:
               for t in range(self.T - 1):
-                  cur_mu = self.reduce_sum(self.reduce_sum_sparse(mu[t] * P_a_cur_policy, axis=1), axis=0)
+                  cur_mu = self.reduce_sum(self.reduce_sum_sparse(tf.tile(tf.expand_dims(tf.expand_dims(mu[t], 1), 2),
+                                                                          [1, tf.shape(policy)[1],
+                                                                           self.n_input]) * P_a_cur_policy, axis=1),
+                                           axis=0)
                   mu.append(cur_mu)
 
       mu = tf.stack(mu)
