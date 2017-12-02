@@ -96,7 +96,7 @@ def main():
   if ACT_RAND == 0:
     P_a = np.argmax(P_a.transpose(0, 2, 1), axis=-1)
 
-  values_gt, policy_gt = value_iteration.value_iteration_old(P_a, rewards_gt, GAMMA, error=0.01, deterministic=True)
+  values_gt, policy_gt = value_iteration.value_iteration(P_a, rewards_gt, GAMMA, error=0.01, deterministic=True)
 
   # use identity matrix as feature
   #feat_map = np.eye(N_STATES)
