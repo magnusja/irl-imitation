@@ -91,10 +91,11 @@ def main():
   gw = gridworld.GridWorld(rmap_gt, {}, 1 - ACT_RAND)
 
   rewards_gt = np.reshape(rmap_gt, H*W, order='F')
-  P_a = gw.get_transition_mat()
 
   if ACT_RAND == 0:
-    P_a = np.argmax(P_a.transpose(0, 2, 1), axis=-1)
+    P_a = gw.get_transition_mat_deterministic()
+  else:
+    P_a = gw.get_transition_mat()
 
   values_gt, policy_gt = value_iteration.value_iteration(P_a, rewards_gt, GAMMA, error=0.01, deterministic=True)
 
