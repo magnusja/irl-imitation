@@ -239,7 +239,10 @@ def compute_state_visition_freq(P_a, gamma, trajs, policy, deterministic=True):
     p       Nx1 vector - state visitation frequencies
   """
   tt = time.time()
-  N_STATES, _, N_ACTIONS = np.shape(P_a)
+  if len(P_a.shape) == 3:
+    N_STATES, _, N_ACTIONS = np.shape(P_a)
+  else:
+    N_STATES, N_ACTIONS = np.shape(P_a)
 
   T = len(trajs[0])
   # mu[s, t] is the prob of visiting state s at time t
@@ -253,16 +256,36 @@ def compute_state_visition_freq(P_a, gamma, trajs, policy, deterministic=True):
   if chunk_size == 0:
     chunk_size = N_STATES
 
-  if deterministic:
-    P_az = P_a[np.arange(0, N_STATES), :, policy]
-  else:
-    P_a = P_a.transpose(0, 2, 1)
 
-  def step(t, start, end):
+  if len(P_a.shape) == 3:
       if deterministic:
-        mu[start:end, t + 1] = np.sum(mu[:, t, np.newaxis] * P_az[:, start:end], axis=0)
+        P_az = P_a[np.arange(0, N_STATES), :, policy]
       else:
-        mu[start:end, t + 1] = np.sum(np.sum(mu[:, t, np.newaxis, np.newaxis] * (P_a[:, :, start:end] * policy[:, :, np.newaxis]), axis=1), axis=0)
+        P_a = P_a.transpose(0, 2, 1)
+  else:
+      if deterministic:
+        P_az = P_a[np.arange(N_STATES), policy]
+
+  if len(P_a.shape) == 3:
+      def step(t, start, end):
+          if deterministic:
+            mu[start:end, t + 1] = np.sum(mu[:, t, np.newaxis] * P_az[:, start:end], axis=0)
+          else:
+            mu[start:end, t + 1] = np.sum(np.sum(mu[:, t, np.newaxis, np.newaxis] * (P_a[:, :, start:end] * policy[:, :, np.newaxis]), axis=1), axis=0)
+  else:
+      def step(t, start, end):
+          print(t)
+          if deterministic:
+            # The following needs be be done using ufunc
+            # https://stackoverflow.com/questions/41990028/add-multiple-values-to-one-numpy-array-index
+            # P_az[start:end] sometimes points to same state for multiple values, with the usual fancy indexing only
+            # one addition (latest) would be executed!
+            # https://stackoverflow.com/questions/15973827/handling-of-duplicate-indices-in-numpy-assignments
+            # mu[P_az[start:end], t + 1] += mu[start:end, t]
+            np.add.at(mu, [P_az[start:end], t + 1], mu[start:end, t])
+          else:
+            mu[start:end, t + 1] = np.sum(np.sum(mu[:, t, np.newaxis, np.newaxis] * (P_a[:, :, start:end] * policy[:, :, np.newaxis]), axis=1), axis=0)
+
 
   with ThreadPoolExecutor(max_workers=num_cpus) as e:
     for t in range(T - 1):
