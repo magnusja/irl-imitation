@@ -93,8 +93,14 @@ def main():
   rewards_gt = np.reshape(rmap_gt, H*W, order='F')
   P_a = gw.get_transition_mat()
 
-  values_gt, policy_gt = value_iteration.value_iteration(P_a, rewards_gt, GAMMA, error=0.01, deterministic=True)
-  
+  if ACT_RAND == 0:
+    print(P_a.transpose(0, 2, 1))
+    P_an = np.argmax(P_a.transpose(0, 2, 1), axis=-1)
+    print(P_an)
+
+  values_gt, policy_gt = value_iteration.value_iteration_old(P_a, rewards_gt, GAMMA, error=0.01, deterministic=False)
+  values_gt2, policy_gt2 = value_iteration.value_iteration(P_an, rewards_gt, GAMMA, error=0.01, deterministic=False)
+
   # use identity matrix as feature
   #feat_map = np.eye(N_STATES)
   feat_map = np.zeros(N_STATES).reshape((H, W))

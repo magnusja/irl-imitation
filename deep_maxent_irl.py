@@ -324,7 +324,10 @@ def compute_state_visition_freq_old(P_a, gamma, trajs, policy, deterministic=Tru
     returns:
       p       Nx1 vector - state visitation frequencies
     """
-    N_STATES, _, N_ACTIONS = np.shape(P_a)
+    if len(P_a.shape) == 3:
+        N_STATES, _, N_ACTIONS = np.shape(P_a)
+    else:
+        N_STATES, N_ACTIONS = np.shape(P_a)
 
     T = len(trajs[0])
     # mu[s, t] is the prob of visiting state s at time t
