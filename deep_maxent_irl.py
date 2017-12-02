@@ -274,7 +274,6 @@ def compute_state_visition_freq(P_a, gamma, trajs, policy, deterministic=True):
             mu[start:end, t + 1] = np.sum(np.sum(mu[:, t, np.newaxis, np.newaxis] * (P_a[:, :, start:end] * policy[:, :, np.newaxis]), axis=1), axis=0)
   else:
       def step(t, start, end):
-          print(t)
           if deterministic:
             # The following needs be be done using ufunc
             # https://stackoverflow.com/questions/41990028/add-multiple-values-to-one-numpy-array-index
@@ -284,7 +283,9 @@ def compute_state_visition_freq(P_a, gamma, trajs, policy, deterministic=True):
             # mu[P_az[start:end], t + 1] += mu[start:end, t]
             np.add.at(mu, [P_az[start:end], t + 1], mu[start:end, t])
           else:
-            mu[start:end, t + 1] = np.sum(np.sum(mu[:, t, np.newaxis, np.newaxis] * (P_a[:, :, start:end] * policy[:, :, np.newaxis]), axis=1), axis=0)
+            # mu[P_a[start:end, :], t + 1] += mu[start:end, t, np.newaxis] * policy[start:end, :]
+            val = mu[start:end, t, np.newaxis] * policy[start:end, :]
+            np.add.at(mu, [P_a[start:end, :], t + 1], mu[start:end, t, np.newaxis] * policy[start:end, :])
 
 
   with ThreadPoolExecutor(max_workers=num_cpus) as e:

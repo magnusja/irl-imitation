@@ -115,10 +115,10 @@ def main():
 
   trajs = generate_demonstrations(gw, policy_gt, n_trajs=N_TRAJS, len_traj=L_TRAJ, rand_start=RAND_START)
 
-  values_gt, policy_gt = value_iteration.value_iteration_old(P_a, rewards_gt, GAMMA, error=0.01, deterministic=True)
+  values_gt, policy_gt = value_iteration.value_iteration_old(P_a, rewards_gt, GAMMA, error=0.01, deterministic=False)
 
-  svf = compute_state_visition_freq_old(P_a, GAMMA, trajs, policy_gt, True)
-  svf2 = compute_state_visition_freq(P_an, GAMMA, trajs, policy_gt.astype(np.int32), True)
+  svf = compute_state_visition_freq_old(P_a, GAMMA, trajs, policy_gt, False)
+  svf2 = compute_state_visition_freq(P_an, GAMMA, trajs, policy_gt, False)
 
 
   
