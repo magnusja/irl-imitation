@@ -284,7 +284,6 @@ def compute_state_visition_freq(P_a, gamma, trajs, policy, deterministic=True):
             np.add.at(mu, [P_az[start:end], t + 1], mu[start:end, t])
           else:
             # mu[P_a[start:end, :], t + 1] += mu[start:end, t, np.newaxis] * policy[start:end, :]
-            val = mu[start:end, t, np.newaxis] * policy[start:end, :]
             np.add.at(mu, [P_a[start:end, :], t + 1], mu[start:end, t, np.newaxis] * policy[start:end, :])
 
 
@@ -413,8 +412,11 @@ def deep_maxent_irl(feat_map, P_a, gamma, trajs, lr, n_iters, conv, sparse):
   """
 
   # tf.set_random_seed(1)
-  
-  N_STATES, _, N_ACTIONS = np.shape(P_a)
+
+  if len(P_a.shape) == 3:
+      N_STATES, _, N_ACTIONS = np.shape(P_a)
+  else:
+      N_STATES, N_ACTIONS = np.shape(P_a)
 
   # init nn model
   nn_r = DeepIRLFC(feat_map.shape, N_ACTIONS, lr, len(trajs[0]), 3, 3, deterministic=False, conv=conv, sparse=sparse)

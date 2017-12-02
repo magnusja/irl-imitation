@@ -94,12 +94,9 @@ def main():
   P_a = gw.get_transition_mat()
 
   if ACT_RAND == 0:
-    print(P_a.transpose(0, 2, 1))
-    P_an = np.argmax(P_a.transpose(0, 2, 1), axis=-1)
-    print(P_an)
+    P_a = np.argmax(P_a.transpose(0, 2, 1), axis=-1)
 
   values_gt, policy_gt = value_iteration.value_iteration_old(P_a, rewards_gt, GAMMA, error=0.01, deterministic=True)
-  values_gt2, policy_gt2 = value_iteration.value_iteration(P_an, rewards_gt, GAMMA, error=0.01, deterministic=True)
 
   # use identity matrix as feature
   #feat_map = np.eye(N_STATES)
@@ -115,13 +112,6 @@ def main():
 
   trajs = generate_demonstrations(gw, policy_gt, n_trajs=N_TRAJS, len_traj=L_TRAJ, rand_start=RAND_START)
 
-  values_gt, policy_gt = value_iteration.value_iteration_old(P_a, rewards_gt, GAMMA, error=0.01, deterministic=False)
-
-  svf = compute_state_visition_freq_old(P_a, GAMMA, trajs, policy_gt, False)
-  svf2 = compute_state_visition_freq(P_an, GAMMA, trajs, policy_gt, False)
-
-
-  
   print 'Deep Max Ent IRL training ..'
   t = time.time()
   rewards = deep_maxent_irl(feat_map, P_a, GAMMA, trajs, LEARNING_RATE, N_ITERS, ARGS.conv, ARGS.sparse)
