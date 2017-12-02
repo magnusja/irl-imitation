@@ -98,8 +98,8 @@ def main():
     P_an = np.argmax(P_a.transpose(0, 2, 1), axis=-1)
     print(P_an)
 
-  values_gt, policy_gt = value_iteration.value_iteration_old(P_a, rewards_gt, GAMMA, error=0.01, deterministic=False)
-  values_gt2, policy_gt2 = value_iteration.value_iteration(P_an, rewards_gt, GAMMA, error=0.01, deterministic=False)
+  values_gt, policy_gt = value_iteration.value_iteration_old(P_a, rewards_gt, GAMMA, error=0.01, deterministic=True)
+  values_gt2, policy_gt2 = value_iteration.value_iteration(P_an, rewards_gt, GAMMA, error=0.01, deterministic=True)
 
   # use identity matrix as feature
   #feat_map = np.eye(N_STATES)
@@ -114,6 +114,12 @@ def main():
   #feat_map = rmap_gt
 
   trajs = generate_demonstrations(gw, policy_gt, n_trajs=N_TRAJS, len_traj=L_TRAJ, rand_start=RAND_START)
+
+  values_gt, policy_gt = value_iteration.value_iteration_old(P_a, rewards_gt, GAMMA, error=0.01, deterministic=False)
+
+  svf = compute_state_visition_freq_old(P_a, GAMMA, trajs, policy_gt, False)
+  svf2 = compute_state_visition_freq_old(P_an, GAMMA, trajs, policy_gt, False)
+
 
   
   print 'Deep Max Ent IRL training ..'

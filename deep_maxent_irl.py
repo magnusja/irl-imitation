@@ -339,12 +339,21 @@ def compute_state_visition_freq_old(P_a, gamma, trajs, policy, deterministic=Tru
     for t in range(T - 1):
       for s in range(N_STATES):
             if deterministic:
-                mu[s, t + 1] = sum([mu[pre_s, t] * P_a[pre_s, s, int(policy[pre_s])] for pre_s in range(N_STATES)])
+                if len(P_a.shape) == 3:
+                    mu[s, t + 1] = sum([mu[pre_s, t] * P_a[pre_s, s, int(policy[pre_s])] for pre_s in range(N_STATES)])
+                else:
+                    mu[P_a[s, int(policy[s])], t + 1] += mu[s, t]
             else:
-                mu[s, t + 1] = sum(
-                    [sum([mu[pre_s, t] * P_a[pre_s, s, a1] * policy[pre_s, a1] for a1 in range(N_ACTIONS)]) for pre_s in
-                     range(N_STATES)])
+                if len(P_a.shape) == 3:
+                    mu[s, t + 1] = sum(
+                        [sum([mu[pre_s, t] * P_a[pre_s, s, a1] * policy[pre_s, a1] for a1 in range(N_ACTIONS)]) for pre_s in
+                        range(N_STATES)])
+                else:
+                    for a1 in range(N_ACTIONS):
+                        mu[P_a[s, a1], t + 1] += mu[s, t] * policy[s, a1]
 
+
+    print(mu)
     p = np.sum(mu, 1)
     print('SUM SVF', p.sum())
 
