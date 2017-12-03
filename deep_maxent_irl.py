@@ -67,7 +67,7 @@ class DeepIRLFC:
     self.T = T
     self.mu = tf.placeholder(tf.float32, self.n_input, name='mu_placerholder')
 
-    #self.svf = self._svf(self.policy)
+    self.svf = self._svf(self.policy)
 
     self.optimizer = tf.train.GradientDescentOptimizer(lr)
     
@@ -148,25 +148,39 @@ class DeepIRLFC:
       return values, policy
 
   def _svf(self, policy):
-      if self.deterministic:
-        r = tf.range(self.n_input, dtype=tf.int64)
-        expanded = tf.expand_dims(policy, 1)
-        tiled = tf.tile(expanded, [1, self.n_input])
+      if not self.deterministic_env:
+          if self.deterministic:
+            r = tf.range(self.n_input, dtype=tf.int64)
+            expanded = tf.expand_dims(policy, 1)
+            tiled = tf.tile(expanded, [1, self.n_input])
 
-        grid = tf.meshgrid(r, r)
-        indices = tf.stack([grid[1], grid[0], tiled], axis=2)
-        
-        P_a_cur_policy = tf.gather_nd(self.sparse_transpose(self.P_a, (0, 2, 1)), indices)
-        P_a_cur_policy = tf.transpose(P_a_cur_policy, (1, 0))
+            grid = tf.meshgrid(r, r)
+            indices = tf.stack([grid[1], grid[0], tiled], axis=2)
+
+            P_a_cur_policy = tf.gather_nd(self.sparse_transpose(self.P_a, (0, 2, 1)), indices)
+            P_a_cur_policy = tf.transpose(P_a_cur_policy, (1, 0))
+          else:
+            P_a_cur_policy = self.P_a * tf.expand_dims(policy, 2)
       else:
-        P_a_cur_policy = self.P_a * tf.expand_dims(policy, 2)
+          if self.deterministic:
+            r = tf.range(self.n_input, dtype=tf.int64)
+            indices = tf.stack([r, policy], axis=1)
+
+            P_a_cur_policy = tf.gather_nd(self.P_a, indices)
+            P_a_cur_policy = tf.Print(P_a_cur_policy, [P_a_cur_policy], 'P_a_cur_policy', summarize=500)
+          else:
+            P_a_cur_policy = self.P_a
 
       mu = list()
       mu.append(self.mu)
       with tf.variable_scope('svf'):
           if self.deterministic:
               for t in range(self.T - 1):
-                  cur_mu = self.reduce_sum(mu[t] * P_a_cur_policy, axis=1)
+                  if self.deterministic_env:
+                      cur_mu = tf.Variable(tf.constant(0, dtype=tf.float32, shape=(self.n_input,)), trainable=False)
+                      cur_mu = tf.scatter_add(cur_mu, P_a_cur_policy, mu[t])
+                  else:
+                    cur_mu = self.reduce_sum(mu[t] * P_a_cur_policy, axis=1)
                   mu.append(cur_mu)
           else:
               for t in range(self.T - 1):
@@ -432,7 +446,7 @@ def deep_maxent_irl(feat_map, P_a, gamma, trajs, lr, n_iters, conv, sparse):
   else:
       N_STATES, N_ACTIONS = np.shape(P_a)
 
-  deterministic = False
+  deterministic = True
 
   # init nn model
   nn_r = DeepIRLFC(feat_map.shape, N_ACTIONS, lr, len(trajs[0]), 3, 3, deterministic_env=len(P_a.shape) == 2,  deterministic=deterministic, conv=conv, sparse=sparse)
@@ -469,12 +483,12 @@ def deep_maxent_irl(feat_map, P_a, gamma, trajs, lr, n_iters, conv, sparse):
     #print('tensorflow VI', time.time() - t)
     
     # compute expected svf
-    mu_exp = compute_state_visition_freq(P_a, gamma, trajs, policy, deterministic=deterministic)
+    #mu_exp = compute_state_visition_freq(P_a, gamma, trajs, policy, deterministic=deterministic)
 
-    #rewards, values, policy, mu_exp = nn_r.get_policy_svf(feat_map, P_a_t, gamma, p_start_state, 0.000001)
+    rewards, values, policy, mu_exp = nn_r.get_policy_svf(feat_map, P_a_t, gamma, p_start_state, 0.000001)
     #print(rewards)
 
-    #assert_all_the_stuff(rewards, policy, values, mu_exp, P_a, N_ACTIONS, N_STATES, trajs, gamma, deterministic)
+    assert_all_the_stuff(rewards, policy, values, mu_exp, P_a, N_ACTIONS, N_STATES, trajs, gamma, deterministic)
 
     # compute gradients on rewards:
     grad_r = mu_D - mu_exp
