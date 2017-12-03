@@ -186,7 +186,12 @@ class DeepIRLFC:
                   mu.append(cur_mu)
           else:
               for t in range(self.T - 1):
-                  cur_mu = self.reduce_sum(self.reduce_sum_sparse(tf.tile(tf.expand_dims(tf.expand_dims(mu[t], 1), 2),
+                  if self.deterministic_env:
+                      cur_mu = tf.Variable(tf.constant(0, dtype=tf.float32, shape=(self.n_input,)), trainable=False)
+                      cur_mu = cur_mu.assign(tf.zeros(shape=(self.n_input,)))
+                      cur_mu = tf.scatter_add(cur_mu, P_a_cur_policy, tf.expand_dims(mu[t], axis=1) * policy)
+                  else:
+                    cur_mu = self.reduce_sum(self.reduce_sum_sparse(tf.tile(tf.expand_dims(tf.expand_dims(mu[t], 1), 2),
                                                                           [1, tf.shape(policy)[1],
                                                                            self.n_input]) * P_a_cur_policy, axis=1),
                                            axis=0)
@@ -448,7 +453,7 @@ def deep_maxent_irl(feat_map, P_a, gamma, trajs, lr, n_iters, conv, sparse):
   else:
       N_STATES, N_ACTIONS = np.shape(P_a)
 
-  deterministic = True
+  deterministic = False
 
   # init nn model
   nn_r = DeepIRLFC(feat_map.shape, N_ACTIONS, lr, len(trajs[0]), 3, 3, deterministic_env=len(P_a.shape) == 2,  deterministic=deterministic, conv=conv, sparse=sparse)
