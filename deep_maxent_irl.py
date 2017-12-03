@@ -432,7 +432,7 @@ def deep_maxent_irl(feat_map, P_a, gamma, trajs, lr, n_iters, conv, sparse):
   else:
       N_STATES, N_ACTIONS = np.shape(P_a)
 
-  deterministic = True
+  deterministic = False
 
   # init nn model
   nn_r = DeepIRLFC(feat_map.shape, N_ACTIONS, lr, len(trajs[0]), 3, 3, deterministic_env=len(P_a.shape) == 2,  deterministic=deterministic, conv=conv, sparse=sparse)
@@ -474,7 +474,7 @@ def deep_maxent_irl(feat_map, P_a, gamma, trajs, lr, n_iters, conv, sparse):
     #rewards, values, policy, mu_exp = nn_r.get_policy_svf(feat_map, P_a_t, gamma, p_start_state, 0.000001)
     #print(rewards)
 
-    assert_all_the_stuff(rewards, policy, values, mu_exp, P_a, P_a_t, N_ACTIONS, N_STATES, trajs, gamma, deterministic)
+    assert_all_the_stuff(rewards, policy, values, mu_exp, P_a, N_ACTIONS, N_STATES, trajs, gamma, deterministic)
 
     # compute gradients on rewards:
     grad_r = mu_D - mu_exp
@@ -491,27 +491,40 @@ def deep_maxent_irl(feat_map, P_a, gamma, trajs, lr, n_iters, conv, sparse):
   # return sigmoid(normalize(rewards))
   return normalize(rewards)
 
-def assert_all_the_stuff(rewards, policy, values, mu_exp, P_a, P_a_t, N_ACTIONS, N_STATES, trajs, gamma, deterministic):
-    assert_values, assert_policy = value_iteration.value_iteration(P_a, rewards, gamma, error=0.000001,
-                                                                   deterministic=deterministic)
-    assert_values_old, assert_policy_old = value_iteration.value_iteration_old(P_a, rewards, gamma, error=0.000001,
-                                                                               deterministic=deterministic)
-    #assert_values2 = value_iteration.optimal_value(N_STATES, N_ACTIONS, P_a_t, rewards, gamma, threshold=0.000001)
+def assert_all_the_stuff(rewards, policy, values, mu_exp, P_a, N_ACTIONS, N_STATES, trajs, gamma, deterministic):
 
-    #assert (np.abs(assert_values - assert_values2) < 0.0001).all()
-    assert (np.abs(assert_values - assert_values_old) < 0.0001).all()
-    assert (np.abs(values - assert_values) < 0.0001).all()
-    assert (np.abs(values - assert_values_old) < 0.0001).all()
+    def assert_vi(P_a):
+        assert_values, assert_policy = value_iteration.value_iteration(P_a, rewards, gamma, error=0.000001,
+                                                                       deterministic=deterministic)
+        assert_values_old, assert_policy_old = value_iteration.value_iteration_old(P_a, rewards, gamma, error=0.000001,
+                                                                                   deterministic=deterministic)
 
-    print(assert_policy)
-    print(assert_policy_old)
-    print(policy)
-    print(values)
-    print(assert_values)
-    print(rewards)
-    assert (np.abs(assert_policy - assert_policy_old) < 0.0001).all()
-    assert (np.abs(policy - assert_policy) < 0.0001).all()
-    assert (np.abs(policy - assert_policy_old) < 0.0001).all()
+        if len(P_a) == 3:
+            assert_values2 = value_iteration.optimal_value(N_STATES, N_ACTIONS, P_a_t, rewards, gamma, threshold=0.000001)
+
+            assert (np.abs(assert_values - assert_values2) < 0.0001).all()
+
+        assert (np.abs(assert_values - assert_values_old) < 0.0001).all()
+        assert (np.abs(values - assert_values) < 0.0001).all()
+        assert (np.abs(values - assert_values_old) < 0.0001).all()
+
+        # print(assert_policy)
+        # print(assert_policy_old)
+        # print(policy)
+        # print(values)
+        # print(assert_values)
+        # print(rewards)
+        assert (np.abs(assert_policy - assert_policy_old) < 0.0001).all()
+        assert (np.abs(policy - assert_policy) < 0.0001).all()
+        assert (np.abs(policy - assert_policy_old) < 0.0001).all()
+
+    assert_vi(P_a)
+    if len(P_a.shape) == 2:
+        print('creating full transistion matrix')
+        # construct full sparse transisiton matrix and make sure values are the same
+        P_a_t = np.zeros((N_STATES, N_ACTIONS, N_STATES))
+        P_a_t[P_a] = 1
+        assert_vi(P_a)
 
     assert (np.abs(mu_exp - compute_state_visition_freq(P_a, gamma, trajs, policy, deterministic=deterministic)) < 0.00001).all()
     assert (
