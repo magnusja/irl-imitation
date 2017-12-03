@@ -448,8 +448,13 @@ def optimal_value(n_states, n_actions, transition_probabilities, reward,
     return v
 
 def value_parallel(policy, P_a, rewards, gamma, threshold=1e-2):
+    if len(P_a.shape) == 3:
+        N_STATES, _, N_ACTIONS = np.shape(P_a)
+    else:
+        N_STATES, N_ACTIONS = np.shape(P_a)
+
     deterministic = len(policy.shape) == 1
-    N_STATES, _, N_ACTIONS = np.shape(P_a)
+    deterministic_env = len(P_a.shape) == 2
 
     values = np.zeros([N_STATES])
 
@@ -458,25 +463,40 @@ def value_parallel(policy, P_a, rewards, gamma, threshold=1e-2):
     if chunk_size == 0:
         chunk_size = N_STATES
 
-    rewards_expanded = rewards[:, np.newaxis].repeat(N_STATES, axis=1)
-    
-    if deterministic:
-        P_az = P_a[np.arange(0, N_STATES), :, policy]
+    rewards_expanded = rewards
+
+    if not deterministic_env:
+        if deterministic:
+            P_az = P_a[np.arange(0, N_STATES), :, policy]
+        else:
+            P_a = P_a.transpose(0, 2, 1)
     else:
-        P_a = P_a.transpose(0, 2, 1)
+        if deterministic:
+            P_az = P_a[np.arange(0, N_STATES), policy]
+
 
     # estimate values
     while True:
         values_tmp = values.copy()
 
         def step(start, end):
-            expected_value = rewards_expanded[start:end, :] + gamma * values_tmp
-            if deterministic:
-                values[start:end] = (P_az[start:end, :] * expected_value).sum(axis=1)
+            if deterministic_env:
+                expected_value = rewards_expanded[P_az[start:end]] + gamma * values_tmp[P_az[start:end]]
             else:
-               expected_value = expected_value[:, :, np.newaxis].repeat(N_ACTIONS, axis=2)
-               #expected_value = np.transpose(expected_value, (0, 2, 1))
-               values[start:end] = (P_a[start:end, :, :] * expected_value).sum(axis=2).sum(axis=1)
+                expected_value = rewards_expanded[start:end, :] + gamma * values_tmp
+
+            if deterministic:
+
+                if deterministic_env:
+                    values[start:end] = expected_value
+                else:
+                    values[start:end] = (P_az[start:end, :] * expected_value).sum(axis=1)
+            else:
+                if deterministic_env:
+                    values[start:end] = (policy * expected_value).sum(axis=1)
+                else:
+                    expected_value = expected_value[:, :, np.newaxis].repeat(N_ACTIONS, axis=2)
+                    values[start:end] = (P_a[start:end, :, :] * expected_value * policy).sum(axis=2).sum(axis=1)
 
         with ThreadPoolExecutor(max_workers=num_cpus) as e:
             futures = list()
@@ -517,16 +537,14 @@ def value(policy, n_states, transition_probabilities, reward, discount,
         for s in range(n_states):
             vs = values_tmp[s]
             a = policy[s]
-            v[s] = sum(transition_probabilities[s, a, k] *
-                       (reward[s] + discount * values_tmp[k])
-                       for k in range(n_states))
+            v[s] = reward[transition_probabilities[s, a]] + discount * values_tmp[transition_probabilities[s, a]]
             diff = max(diff, abs(vs - v[s]))
 
     return v
 
 def expected_value_diff(P_a, true_rewards, gamma, p_start, optimal_value, policy):
   v = value_parallel(policy, P_a, true_rewards, gamma)
-  #v_old = value(policy, P_a.shape[0], P_a.transpose(0, 2, 1), true_rewards, gamma)
+  #v_old = value(policy, P_a.shape[0], P_a, true_rewards, gamma)
 
   #if len(policy.shape) == 1:
   #  assert (np.abs(v - v_old) < 0.001).all()
