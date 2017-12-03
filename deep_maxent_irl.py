@@ -167,7 +167,6 @@ class DeepIRLFC:
             indices = tf.stack([r, policy], axis=1)
 
             P_a_cur_policy = tf.gather_nd(self.P_a, indices)
-            P_a_cur_policy = tf.Print(P_a_cur_policy, [P_a_cur_policy], 'P_a_cur_policy', summarize=500)
           else:
             P_a_cur_policy = self.P_a
 
@@ -177,7 +176,10 @@ class DeepIRLFC:
           if self.deterministic:
               for t in range(self.T - 1):
                   if self.deterministic_env:
+                      # TODO using a variable here seems a little hacky
+                      # https://github.com/tensorflow/tensorflow/issues/2358
                       cur_mu = tf.Variable(tf.constant(0, dtype=tf.float32, shape=(self.n_input,)), trainable=False)
+                      cur_mu = cur_mu.assign(tf.zeros(shape=(self.n_input,)))
                       cur_mu = tf.scatter_add(cur_mu, P_a_cur_policy, mu[t])
                   else:
                     cur_mu = self.reduce_sum(mu[t] * P_a_cur_policy, axis=1)
