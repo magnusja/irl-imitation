@@ -325,6 +325,34 @@ class GridWorld(object):
           P_a[si, sj, a] = prob
     return P_a
 
+  def get_transition_mat_deterministic(self):
+    """
+    get transition dynamics of the gridworld
+
+    return:
+      P_a         NxNxN_ACTIONS transition probabilities matrix -
+                    P_a[s0, s1, a] is the transition prob of
+                    landing at state s1 when taking action
+                    a at state s0
+    """
+    N_STATES = self.height*self.width
+    N_ACTIONS = len(self.actions)
+    P_a = np.zeros((N_STATES, N_ACTIONS), dtype=np.int32)
+    for si in range(N_STATES):
+      posi = self.idx2pos(si)
+      for a in range(N_ACTIONS):
+        probs = self.get_transition_states_and_probs(posi, a)
+
+        for posj, prob in probs:
+          sj = self.pos2idx(posj)
+          # Prob of si to sj given action a
+          prob = int(prob)
+          if prob == 1:
+            P_a[si, a] = sj
+          elif prob != 0:
+            raise ValueError('not a deterministic environment!')
+    return P_a
+
   def get_values_mat(self, values):
     """
     inputs:

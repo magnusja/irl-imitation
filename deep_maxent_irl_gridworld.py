@@ -8,7 +8,7 @@ import img_utils
 from mdp import gridworld
 from mdp import value_iteration
 from deep_maxent_irl import *
-from maxent_irl import *
+
 from utils import *
 from lp_irl import *
 
@@ -91,25 +91,30 @@ def main():
   gw = gridworld.GridWorld(rmap_gt, {}, 1 - ACT_RAND)
 
   rewards_gt = np.reshape(rmap_gt, H*W, order='F')
-  P_a = gw.get_transition_mat()
+
+  if ACT_RAND == 0:
+    P_a = gw.get_transition_mat_deterministic()
+  else:
+    P_a = gw.get_transition_mat()
 
   values_gt, policy_gt = value_iteration.value_iteration(P_a, rewards_gt, GAMMA, error=0.01, deterministic=True)
-  
+
   # use identity matrix as feature
   #feat_map = np.eye(N_STATES)
-  feat_map = np.zeros(N_STATES).reshape((H, W))
+  # feat_map = np.zeros(N_STATES).reshape((H, W))
+  feat_map = np.random.rand(N_STATES).reshape((H, W))
   #feat_map = np.arange(N_STATES).reshape((H, W))
   if ARGS.conv:
-    feat_map[H-1, W-1] = -5
-    feat_map[0, W-1] = -5
-    feat_map[H-1, 0] = -5
+    #feat_map[H-1, W-1] = -5
+    #feat_map[0, W-1] = -5
+    #feat_map[H-1, 0] = -5
+    pass
   else:
     feat_map = feat_map.reshape(N_STATES)
   #feat_map = rmap_gt
 
   trajs = generate_demonstrations(gw, policy_gt, n_trajs=N_TRAJS, len_traj=L_TRAJ, rand_start=RAND_START)
 
-  
   print 'Deep Max Ent IRL training ..'
   t = time.time()
   rewards = deep_maxent_irl(feat_map, P_a, GAMMA, trajs, LEARNING_RATE, N_ITERS, ARGS.conv, ARGS.sparse)
