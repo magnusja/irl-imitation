@@ -89,10 +89,10 @@ class DeepIRLFC:
     if conv:
         input_s = tf.placeholder(tf.float32, [None, self.width, self.height, 1])
         with tf.variable_scope(name):
-          #conv1 = tf_utils.conv2d(input_s, 64, (1, 1), 1)
-          #conv2 = tf_utils.conv2d(conv1, 32, (1, 1), 1)
-          #conv3 = tf_utils.conv2d(conv2, 32, (1, 1), 1)
-          reward = tf_utils.conv2d(input_s, 1, (1, 1), 1)
+          conv1 = tf_utils.conv2d(input_s, 64, (3, 3), 1)
+          conv2 = tf_utils.conv2d(conv1, 32, (1, 1), 1)
+          conv3 = tf_utils.conv2d(conv2, 32, (1, 1), 1)
+          reward = tf_utils.conv2d(conv3, 1, (1, 1), 1)
         theta = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=name)
         return input_s, tf.squeeze(tf.reshape(reward, (-1, self.n_input))), theta
     else:
@@ -495,7 +495,7 @@ def deep_maxent_irl(feat_map, P_a, gamma, trajs, lr, n_iters, conv, sparse):
     rewards, values, policy, mu_exp = nn_r.get_policy_svf(feat_map, P_a_t, gamma, p_start_state, 0.000001)
     #print(rewards)
 
-    assert_all_the_stuff(rewards, policy, values, mu_exp, P_a, N_ACTIONS, N_STATES, trajs, gamma, deterministic)
+    #assert_all_the_stuff(rewards, policy, values, mu_exp, P_a, N_ACTIONS, N_STATES, trajs, gamma, deterministic)
 
     # compute gradients on rewards:
     grad_r = mu_D - mu_exp
